@@ -1,5 +1,8 @@
 # Architecture
 
+> For a plain-language introduction — what this is, who it's for, and why the four states matter — start with
+> [`OVERVIEW.md`](OVERVIEW.md). This document is the technical design.
+
 ## The idea
 
 A first pass over material — a close reading, an extraction, a classifier run — is far more reliable at reporting

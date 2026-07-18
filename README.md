@@ -10,7 +10,8 @@ confident answers, when what it is actually equipped to produce reliably is a **
 uncertainty**. So the deliverable is not a confident index. It is a multi-dimensional map of what remains open — and,
 for each open thing, a cue to who could close it.
 
-Pure Swift, zero non-Swift dependencies. See `AGENTS.md` for agent instructions and `docs/` for the design.
+Pure Swift, zero non-Swift dependencies. New here? [`docs/OVERVIEW.md`](docs/OVERVIEW.md) is a plain-language tour;
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the technical design. See `AGENTS.md` for agent instructions.
 
 ![Telemachus reading uncertainty, light](docs/images/uncertainty-telemachus-light.png)
 
