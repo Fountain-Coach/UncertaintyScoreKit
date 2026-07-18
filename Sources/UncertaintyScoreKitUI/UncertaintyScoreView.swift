@@ -1,0 +1,306 @@
+import SwiftUI
+import UncertaintyScoreKit
+
+// The score, drawn. One row per dimension over a shared spine, mixed with solo/mute — a person browses the reading's
+// uncertainty the way they'd browse a multitrack: follow one instrument, or read the whole texture at once.
+//
+// Colour carries STATE, never dimension identity (the lane's row + label already name the dimension), so the palette
+// is two validated status hues + neutral ink — checked colourblind-safe in light and dark by the dataviz validator.
+// Every state is ALSO a distinct shape, so the encoding survives greyscale, forced-colours, and print:
+//   · settled   — a faint hum line
+//   · thin      — a low single bar
+//   · ambiguity — a HELD DYAD: two bars, one above one below, the two readings sounded together
+//   · failure   — a LOUD broken block with a silence cut through it and a caret; "not read", not "hard to read"
+// That last distinction is the whole point: failure must read as different in kind from honest ambiguity.
+
+// MARK: - Palette (validated: light #3E63DD/#D93A4A, dark #5B86E8/#EA5566 — CVD-safe, ≥3:1 on both surfaces)
+
+private extension Color {
+    init(hex: UInt32) {
+        self.init(
+            .sRGB,
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255,
+            opacity: 1
+        )
+    }
+}
+
+private struct UncertaintyPalette {
+    let ambiguity: Color
+    let failure: Color
+
+    init(_ scheme: ColorScheme) {
+        ambiguity = scheme == .dark ? Color(hex: 0x5B86E8) : Color(hex: 0x3E63DD)
+        failure = scheme == .dark ? Color(hex: 0xEA5566) : Color(hex: 0xD93A4A)
+    }
+
+    func stroke(for state: UncertaintyState) -> Color {
+        switch state {
+        case .settled: return .secondary
+        case .thin, .ambiguity: return ambiguity
+        case .failure: return failure
+        }
+    }
+
+    func label(for state: UncertaintyState) -> String {
+        switch state {
+        case .settled: return "settled"
+        case .thin: return "thin"
+        case .ambiguity: return "ambiguity"
+        case .failure: return "not read / ungrounded"
+        }
+    }
+}
+
+// MARK: - View
+
+public struct UncertaintyScoreView: View {
+    public let score: UncertaintyScore
+
+    @Environment(\.colorScheme) private var scheme
+    @State private var muted: Set<String> = []
+    @State private var soloed: Set<String> = []
+    @State private var selection: UncertaintyNote?
+
+    public init(score: UncertaintyScore) {
+        self.score = score
+    }
+
+    private static let gutterWidth: CGFloat = 176
+    private static let laneHeight: CGFloat = 34
+
+    private var visibleLanes: [UncertaintyLane] {
+        if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
+        return score.lanes.filter { !muted.contains($0.id) }
+    }
+
+    private func isVisible(_ lane: UncertaintyLane) -> Bool {
+        soloed.isEmpty ? !muted.contains(lane.id) : soloed.contains(lane.id)
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            legend
+            tuttiRibbon
+            VStack(spacing: 3) {
+                ForEach(score.lanes) { lane in
+                    laneRow(lane)
+                }
+            }
+            selectionDetail
+        }
+        .padding(18)
+        .frame(minWidth: 620, alignment: .topLeading)
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    // MARK: Header + legend
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(score.title).font(.system(size: 20, weight: .semibold))
+            Text("What the first reading is unsure of — \(score.lanes.count) dimensions over lines \(score.spineStart)–\(score.spineEnd), from \(score.itemCount) passage\(score.itemCount == 1 ? "" : "s"). Solo or mute a dimension; the ribbon shows where problems stack up.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var legend: some View {
+        let palette = UncertaintyPalette(scheme)
+        return HStack(spacing: 14) {
+            ForEach(UncertaintyState.allCases, id: \.self) { state in
+                HStack(spacing: 5) {
+                    legendGlyph(state, palette: palette)
+                    Text(palette.label(for: state)).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            if !muted.isEmpty || !soloed.isEmpty {
+                Button("Reset mix") { muted.removeAll(); soloed.removeAll() }
+                    .buttonStyle(.link).font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func legendGlyph(_ state: UncertaintyState, palette: UncertaintyPalette) -> some View {
+        Canvas { ctx, size in
+            drawMark(&ctx, state: state, rect: CGRect(x: 0, y: 0, width: size.width, height: size.height),
+                     magnitude: 1, palette: palette, selected: false)
+        }
+        .frame(width: 20, height: 16)
+    }
+
+    // MARK: Tutti ribbon — the triage heat strip
+
+    private var tuttiRibbon: some View {
+        let palette = UncertaintyPalette(scheme)
+        let lanes = visibleLanes
+        return HStack(spacing: 0) {
+            Text("stacked").font(.caption2).foregroundStyle(.tertiary)
+                .frame(width: Self.gutterWidth, alignment: .trailing).padding(.trailing, 8)
+            GeometryReader { proxy in
+                Canvas { ctx, size in
+                    guard score.spineEnd > score.spineStart else { return }
+                    let steps = Int(size.width)
+                    for px in stride(from: 0, to: max(1, steps), by: 1) {
+                        let pos = score.spineStart + Int(Double(px) / size.width * Double(score.spineEnd - score.spineStart))
+                        let o = score.openness(at: pos, lanes: lanes)
+                        guard o > 0.01 else { continue }
+                        // Any failure in the column tints the heat red; otherwise it reads as accumulating ambiguity.
+                        let failing = lanes.contains { $0.note(at: pos)?.state.isFailure == true }
+                        let color = failing ? palette.failure : palette.ambiguity
+                        let barH = size.height * o
+                        let rect = CGRect(x: CGFloat(px), y: size.height - barH, width: 1.2, height: barH)
+                        ctx.fill(Path(rect), with: .color(color.opacity(0.28 + 0.6 * o)))
+                    }
+                }
+            }
+            .frame(height: 26)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.035)))
+        }
+    }
+
+    // MARK: Lane row
+
+    @ViewBuilder
+    private func laneRow(_ lane: UncertaintyLane) -> some View {
+        let palette = UncertaintyPalette(scheme)
+        let visible = isVisible(lane)
+        HStack(spacing: 8) {
+            laneGutter(lane, palette: palette)
+            GeometryReader { proxy in
+                Canvas { ctx, size in
+                    // Baseline
+                    let baseline = CGRect(x: 0, y: size.height - 1, width: size.width, height: 1)
+                    ctx.fill(Path(baseline), with: .color(.secondary.opacity(0.12)))
+                    guard visible, score.spineEnd > score.spineStart else { return }
+                    let span = Double(score.spineEnd - score.spineStart + 1)
+                    for note in lane.notes {
+                        let x0 = CGFloat(Double(note.start - score.spineStart) / span) * size.width
+                        let x1 = CGFloat(Double(note.end - score.spineStart + 1) / span) * size.width
+                        let rect = CGRect(x: x0, y: 2, width: max(3, x1 - x0 - 1), height: size.height - 4)
+                        drawMark(&ctx, state: note.state, rect: rect, magnitude: note.magnitude,
+                                 palette: palette, selected: selection?.id == note.id)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { location in
+                    guard visible, score.spineEnd > score.spineStart else { return }
+                    let span = Double(score.spineEnd - score.spineStart + 1)
+                    let pos = score.spineStart + Int(location.x / proxy.size.width * span)
+                    if let hit = lane.note(at: pos) { selection = hit }
+                }
+            }
+            .frame(height: Self.laneHeight)
+            .opacity(visible ? 1 : 0.28)
+        }
+    }
+
+    private func laneGutter(_ lane: UncertaintyLane, palette: UncertaintyPalette) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(palette.stroke(for: lane.peakState).opacity(lane.peakState == .settled ? 0.4 : 0.9))
+                .frame(width: 7, height: 7)
+            Text(lane.title).font(.system(size: 11, weight: lane.isFailureAxis ? .semibold : .regular))
+                .lineLimit(1).truncationMode(.tail)
+                .foregroundStyle(isVisible(lane) ? .primary : .secondary)
+            Spacer(minLength: 0)
+            mixButton("S", on: soloed.contains(lane.id)) { toggle(&soloed, lane.id) }
+            mixButton("M", on: muted.contains(lane.id)) { toggle(&muted, lane.id) }
+        }
+        .frame(width: Self.gutterWidth, alignment: .leading)
+        .help(lane.isFailureAxis ? "A failure here means the span was not read or could not be grounded." : lane.title)
+    }
+
+    private func mixButton(_ label: String, on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(.system(size: 9, weight: .bold))
+                .frame(width: 15, height: 15)
+                .background(RoundedRectangle(cornerRadius: 3).fill(on ? Color.accentColor.opacity(0.85) : Color.primary.opacity(0.08)))
+                .foregroundStyle(on ? Color.white : Color.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggle(_ set: inout Set<String>, _ id: String) {
+        if set.contains(id) { set.remove(id) } else { set.insert(id) }
+    }
+
+    // MARK: Selection detail
+
+    @ViewBuilder
+    private var selectionDetail: some View {
+        if let note = selection {
+            let palette = UncertaintyPalette(scheme)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("lines \(note.start)–\(note.end)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    Text(palette.label(for: note.state)).font(.caption.weight(.semibold))
+                        .foregroundStyle(note.state == .failure ? palette.failure : (note.state == .settled ? Color.secondary : palette.ambiguity))
+                }
+                Text(note.detail.isEmpty ? "No detail was recorded for this span." : note.detail)
+                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+                if let resolvedBy = note.resolvedBy {
+                    Text("Closed by: \(resolvedBy)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.04)))
+        } else {
+            Text("Tap a mark to see what's open there and who could close it.")
+                .font(.caption).foregroundStyle(.tertiary)
+        }
+    }
+
+    // MARK: Mark drawing — the shape half of the encoding
+
+    private func drawMark(_ ctx: inout GraphicsContext, state: UncertaintyState, rect: CGRect,
+                          magnitude: Double, palette: UncertaintyPalette, selected: Bool) {
+        let color = palette.stroke(for: state)
+        switch state {
+        case .settled:
+            // A faint hum: a thin line at mid-height. Read, and fine.
+            let y = rect.midY
+            let line = CGRect(x: rect.minX, y: y - 0.75, width: rect.width, height: 1.5)
+            ctx.fill(Path(roundedRect: line, cornerRadius: 0.75), with: .color(color.opacity(0.28)))
+
+        case .thin:
+            // A single low bar from the baseline.
+            let h = max(3, rect.height * 0.4 * magnitude)
+            let bar = CGRect(x: rect.minX, y: rect.maxY - h, width: rect.width, height: h)
+            ctx.fill(Path(roundedRect: bar, cornerRadius: 2), with: .color(color.opacity(0.55)))
+
+        case .ambiguity:
+            // HELD DYAD — two bars, one high one low, with a gap: two readings sounded at once.
+            let barH = max(3, rect.height * 0.32 * (0.6 + 0.4 * magnitude))
+            let upper = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: barH)
+            let lower = CGRect(x: rect.minX, y: rect.maxY - barH, width: rect.width, height: barH)
+            ctx.fill(Path(roundedRect: upper, cornerRadius: 2), with: .color(color.opacity(0.85)))
+            ctx.fill(Path(roundedRect: lower, cornerRadius: 2), with: .color(color.opacity(0.85)))
+
+        case .failure:
+            // LOUD and BROKEN — a full block with a silence cut through it and a caret above. Not a quiet chord.
+            let block = rect.insetBy(dx: 0, dy: 1)
+            ctx.fill(Path(roundedRect: block, cornerRadius: 2), with: .color(color.opacity(0.92)))
+            // The silence: a surface-coloured gap slicing the block, so a breakdown reads as an absence.
+            let gap = CGRect(x: block.midX - 1, y: block.minY, width: 2, height: block.height)
+            ctx.fill(Path(gap), with: .color(Color(nsColor: .textBackgroundColor)))
+            // Caret marker so the state survives greyscale / colour-blindness.
+            var caret = Path()
+            let cx = block.midX, cy = block.minY + 2.5
+            caret.move(to: CGPoint(x: cx - 3, y: cy + 3))
+            caret.addLine(to: CGPoint(x: cx, y: cy))
+            caret.addLine(to: CGPoint(x: cx + 3, y: cy + 3))
+            ctx.stroke(caret, with: .color(color), lineWidth: 1.5)
+        }
+
+        if selected {
+            ctx.stroke(Path(roundedRect: rect.insetBy(dx: -1, dy: -1), cornerRadius: 3),
+                       with: .color(.accentColor), lineWidth: 1.5)
+        }
+    }
+}
