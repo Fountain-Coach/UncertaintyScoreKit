@@ -58,14 +58,25 @@ private struct UncertaintyPalette {
 
 public struct UncertaintyScoreView: View {
     public let score: UncertaintyScore
+    /// Called when the reader clicks a mark, with the note under the click.
+    ///
+    /// The map names an openness over a span of the spine; only the HOST knows what that span is — a passage, a
+    /// beat, a log window — so only the host can show it in the reader's own terms. Without this the selection died
+    /// inside the view: the detail line named the span, and nothing else on screen moved.
+    ///
+    /// Hands back the core `UncertaintyNote`, never anything of the host's, so the core stays ignorant of any
+    /// producer's domain (AGENTS invariant 2). The view keeps owning its own selection — this reports, it does not
+    /// delegate. Called synchronously from the gesture on the main actor, so keep the work cheap.
+    public let onSelectNote: ((UncertaintyNote) -> Void)?
 
     @Environment(\.colorScheme) private var scheme
     @State private var muted: Set<String> = []
     @State private var soloed: Set<String> = []
     @State private var selection: UncertaintyNote?
 
-    public init(score: UncertaintyScore) {
+    public init(score: UncertaintyScore, onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
+        self.onSelectNote = onSelectNote
     }
 
     private static let gutterWidth: CGFloat = 176
@@ -192,7 +203,10 @@ public struct UncertaintyScoreView: View {
                     guard visible, score.spineEnd > score.spineStart else { return }
                     let span = Double(score.spineEnd - score.spineStart + 1)
                     let pos = score.spineStart + Int(location.x / proxy.size.width * span)
-                    if let hit = lane.note(at: pos) { selection = hit }
+                    if let hit = lane.note(at: pos) {
+                        selection = hit
+                        onSelectNote?(hit)
+                    }
                 }
             }
             .frame(height: Self.laneHeight)

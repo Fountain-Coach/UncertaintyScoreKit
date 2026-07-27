@@ -44,3 +44,35 @@ Results:
 - 2026-07-18: Steps 1–5 landed. Core + UI + demo build clean; 6 core tests pass; Telemachus verified in both themes.
   Promoted from a local target in the Reframe workspace to this standalone repo once the encoding was proven, exactly
   so no public API was cut around an unproven design.
+
+---
+
+Title: Report the selected note to the host (2026-07-27)
+Goal: Let a host application react when the reader clicks a mark on the score — so the openness the map names can be
+shown in the host's own terms (the passage, the beat, the line span it refers to) instead of dying inside the view.
+Scope: `UncertaintyScoreKitUI` only — one optional `onSelectNote` closure on `UncertaintyScoreView`, invoked with the
+core `UncertaintyNote` already resolved by the existing hit-test. Additive and source-compatible: the parameter
+defaults to `nil` and the view's internal selection/detail behaviour is unchanged.
+Non-goals: any knowledge of what a host does with the note (navigating, highlighting, scrolling — all the producer's
+business); a selection BINDING (the view keeps owning its selection; a two-way binding would make the host
+responsible for the view's internal state); reporting hover, mute or solo.
+Constraints: FCIS layering — the callback hands back a CORE type, so the core still knows nothing about any
+producer's domain (AGENTS invariant 2). No new dependencies. Semver: additive UI API on a pre-1.0 package → MINOR
+bump to 0.2.0, per the FCIS versioning rule that additive change leaves existing requirements unchanged.
+Plan:
+- Step 1 (status: done) - `onSelectNote: ((UncertaintyNote) -> Void)?` on `UncertaintyScoreView`, defaulted to nil,
+  called from the existing lane hit-test alongside setting `selection`.
+- Step 2 (status: done) - Validation per `.codex/skills/repo-ops`: build, core tests, render the fixtures and LOOK
+  (the encoding is untouched, so the PNGs must be unchanged in kind).
+- Step 3 (status: done) - Tag v0.2.0.
+Validation:
+- `swift build`
+- `swift test` — the core is unchanged, so all existing tests must still pass untouched.
+- `swift run UncertaintyScoreDemo ./out` — the encoding did not change; confirm by eye that failure still reads as a
+  loud broken red absence and ambiguity as a calm blue held dyad.
+Risks: a host that does expensive work in the callback would do it on every mark click, on the main actor — the
+closure is called synchronously from the gesture, so a host must keep it cheap. Noted here rather than defended
+against, because throttling in the view would hide a host's own performance bug.
+Results:
+- 2026-07-27: Step 1–3 landed. Core untouched (6 tests pass unchanged); UI gained one optional closure; fixtures
+  re-rendered and inspected in light and dark — encoding identical, as intended.
