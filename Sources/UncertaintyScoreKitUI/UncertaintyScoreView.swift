@@ -58,14 +58,25 @@ private struct UncertaintyPalette {
 
 public struct UncertaintyScoreView: View {
     public let score: UncertaintyScore
+    /// Called when the reader clicks a mark, with the note under the click.
+    ///
+    /// The map names an openness over a span of the spine; only the HOST knows what that span is — a passage, a
+    /// beat, a log window — so only the host can show it in the reader's own terms. Without this the selection died
+    /// inside the view: the detail line named the span, and nothing else on screen moved.
+    ///
+    /// Hands back the core `UncertaintyNote`, never anything of the host's, so the core stays ignorant of any
+    /// producer's domain (AGENTS invariant 2). The view keeps owning its own selection — this reports, it does not
+    /// delegate. Called synchronously from the gesture on the main actor, so keep the work cheap.
+    public let onSelectNote: ((UncertaintyNote) -> Void)?
 
     @Environment(\.colorScheme) private var scheme
     @State private var muted: Set<String> = []
     @State private var soloed: Set<String> = []
     @State private var selection: UncertaintyNote?
 
-    public init(score: UncertaintyScore) {
+    public init(score: UncertaintyScore, onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
+        self.onSelectNote = onSelectNote
     }
 
     private static let gutterWidth: CGFloat = 176
@@ -192,11 +203,57 @@ public struct UncertaintyScoreView: View {
                     guard visible, score.spineEnd > score.spineStart else { return }
                     let span = Double(score.spineEnd - score.spineStart + 1)
                     let pos = score.spineStart + Int(location.x / proxy.size.width * span)
-                    if let hit = lane.note(at: pos) { selection = hit }
+                    if let hit = lane.note(at: pos) {
+                        selection = hit
+                        onSelectNote?(hit)
+                    }
                 }
+                // FCIS-AX: A CANVAS IS OPAQUE TO THE ACCESSIBILITY TREE. The marks were drawn pixels with a single
+                // hit-test behind them, so every mark on this score was invisible and unreachable to VoiceOver, to
+                // an agent, and to an automated verifier — the standard's central failure mode ("custom-drawn views
+                // MUST expose their content"). Drawing is untouched; this overlays one real element per note, so a
+                // mark can be found by identity, read aloud, and activated without a pointer.
+                .overlay(alignment: .leading) { markAccessibilityLayer(lane, visible: visible, width: proxy.size.width) }
             }
             .frame(height: Self.laneHeight)
             .opacity(visible ? 1 : 0.28)
+        }
+    }
+
+    /// One accessibility element per drawn mark, laid over the Canvas with the same geometry the drawing uses.
+    ///
+    /// Transparent by construction — it adds no pixels and changes no encoding; it only gives the marks the presence
+    /// in the accessibility tree that FCIS-AX requires of a custom-drawn surface. Each element carries a stable
+    /// identifier (`uncertainty-note-<id>`), a spoken label naming the state, span and detail, and an activation
+    /// that performs exactly what a click performs — so the tree is not a parallel description of the view but the
+    /// same behaviour, reachable by identity.
+    @ViewBuilder
+    private func markAccessibilityLayer(_ lane: UncertaintyLane, visible: Bool, width: CGFloat) -> some View {
+        if visible, score.spineEnd > score.spineStart, width > 0 {
+            let span = Double(score.spineEnd - score.spineStart + 1)
+            // The SAME wording the legend shows, so what is spoken and what is seen never diverge.
+            let naming = UncertaintyPalette(scheme)
+            ZStack(alignment: .leading) {
+                ForEach(lane.notes) { note in
+                    let x0 = CGFloat(Double(note.start - score.spineStart) / span) * width
+                    let x1 = CGFloat(Double(note.end - score.spineStart + 1) / span) * width
+                    Color.clear
+                        .frame(width: max(3, x1 - x0 - 1))
+                        .offset(x: x0)
+                        .accessibilityElement()
+                        .accessibilityIdentifier("uncertainty-note-\(note.id)")
+                        .accessibilityLabel("\(lane.title), \(naming.label(for: note.state)),"
+                                            + " lines \(note.start) to \(note.end)"
+                                            + (note.detail.isEmpty ? "" : ". \(note.detail)"))
+                        .accessibilityValue(note.resolvedBy.map { "Closed by \($0)" } ?? "")
+                        .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction {
+                            selection = note
+                            onSelectNote?(note)
+                        }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
