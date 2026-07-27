@@ -298,8 +298,13 @@ public struct UncertaintyScoreView: View {
                     Text(palette.label(for: note.state)).font(.caption.weight(.semibold))
                         .foregroundStyle(note.state == .failure ? palette.failure : (note.state == .settled ? Color.secondary : palette.ambiguity))
                 }
+                // THE DIAGNOSIS IS THE POINT OF THE WHOLE SCORE, so it is sized like one. Set in .callout it read as
+                // a caption under a chart — the ribbon looked like the finding and the sentence looked like a
+                // footnote, when the sentence is what the reading actually has to say. One step under the score's
+                // own title (20pt), which is the largest a line may be without outranking the thing it belongs to.
                 Text(note.detail.isEmpty ? "No detail was recorded for this span." : note.detail)
-                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 17, weight: .regular))
+                    .fixedSize(horizontal: false, vertical: true)
                 if let resolvedBy = note.resolvedBy {
                     Text("Closed by: \(resolvedBy)").font(.caption).foregroundStyle(.secondary)
                 }
