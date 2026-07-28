@@ -63,6 +63,14 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
     public let magnitude: Double
     /// Plain-language account of the openness, for the person reading the map. Never internal codes.
     public let detail: String
+    /// THE THING'S OWN NAME, when it has one, as distinct from the account of it.
+    ///
+    /// A note in a braid is a thing with a life — a question a story holds open — and it is called something: the
+    /// question itself. `detail` is what the map says ABOUT it ("held across 45 passages. Still open where the
+    /// reading stops."), which is the right thing to read in a panel and the wrong thing to carry when the note is
+    /// handed to something else. Empty for notes that are readings rather than things, where the account is all
+    /// there is.
+    public let title: String
     /// The cheapest next operation that could close this, phrased for a human ("paid escalation", "re-observe").
     /// `nil` means nothing closes it more cheaply than it already is.
     public let resolvedBy: String?
@@ -79,6 +87,7 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
         state: UncertaintyState,
         magnitude: Double? = nil,
         detail: String = "",
+        title: String = "",
         resolvedBy: String? = nil,
         continuesPastEnd: Bool = false
     ) {
@@ -88,6 +97,7 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
         self.state = state
         self.magnitude = Swift.min(1, Swift.max(0, magnitude ?? state.weight))
         self.detail = detail
+        self.title = title
         self.resolvedBy = resolvedBy
         self.continuesPastEnd = continuesPastEnd
     }
@@ -102,6 +112,7 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
         self.state = try c.decode(UncertaintyState.self, forKey: .state)
         self.magnitude = try c.decode(Double.self, forKey: .magnitude)
         self.detail = try c.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         self.resolvedBy = try c.decodeIfPresent(String.self, forKey: .resolvedBy)
         self.continuesPastEnd = try c.decodeIfPresent(Bool.self, forKey: .continuesPastEnd) ?? false
     }

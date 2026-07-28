@@ -72,6 +72,18 @@ extension View {
     }
 }
 
+/// WHERE EACH MARK IS ON SCREEN, for a host that needs to draw to it.
+///
+/// A map that can be dragged from is a map things LEAVE, and what they leave has to be drawn from where the mark
+/// actually is — a wire that starts at the panel instead of at the bar is a wire to nothing in particular. The view
+/// publishes each drawn mark's frame; the host reads them with `overlayPreferenceValue` and draws whatever it likes.
+public struct UncertaintyNoteAnchorsKey: PreferenceKey {
+    public static let defaultValue: [String: Anchor<CGRect>] = [:]
+    public static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
 public enum UncertaintyBraidPalette {
     public static func tint(index: Int, scheme: ColorScheme = .light) -> Color {
         let hue = (Double(index) * 0.6180339887).truncatingRemainder(dividingBy: 1)
@@ -419,25 +431,35 @@ public struct UncertaintyScoreView: View {
                 ForEach(lane.notes) { note in
                     let x0 = CGFloat(Double(note.start - score.spineStart) / span) * width
                     let x1 = CGFloat(Double(note.end - score.spineStart + 1) / span) * width
-                    Color.clear
-                        .frame(width: max(3, x1 - x0 - 1))
-                        .offset(x: x0)
-                        .accessibilityElement()
-                        .accessibilityIdentifier("uncertainty-note-\(note.id)")
-                        .accessibilityLabel("\(lane.title), \(naming.label(for: note.state)),"
-                                            + " lines \(note.start) to \(note.end)"
-                                            + (note.detail.isEmpty ? "" : ". \(note.detail)"))
-                        .accessibilityValue(note.resolvedBy.map { "Closed by \($0)" } ?? "")
-                        .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
-                        .accessibilityAction { select(note) }
-                        .contentShape(Rectangle())
-                        .ifLet(dragProvider) { view, provider in
-                            view.onDrag { provider(note) }
-                        }
+                    markElement(note, lane: lane, width: max(3, x1 - x0 - 1)).offset(x: x0)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// One mark's presence outside the Canvas: reachable by identity, activatable, draggable, and publishing
+    /// where it is so a host can draw to it. Extracted because the whole thing in one expression stopped
+    /// type-checking in reasonable time.
+    @ViewBuilder
+    private func markElement(_ note: UncertaintyNote, lane: UncertaintyLane, width: CGFloat) -> some View {
+        let naming = UncertaintyPalette(scheme)
+        let spokenName = note.title.isEmpty ? note.detail : note.title
+        let label = "\(lane.title), \(naming.label(for: note.state)), lines \(note.start) to \(note.end)"
+            + (spokenName.isEmpty ? "" : ". \(spokenName)")
+        Color.clear
+            .frame(width: width)
+            .accessibilityElement()
+            .accessibilityIdentifier("uncertainty-note-\(note.id)")
+            .accessibilityLabel(label)
+            .accessibilityValue(note.resolvedBy.map { "Closed by \($0)" } ?? "")
+            .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { select(note) }
+            .contentShape(Rectangle())
+            .anchorPreference(key: UncertaintyNoteAnchorsKey.self, value: .bounds) { [note.id: $0] }
+            .ifLet(dragProvider) { view, provider in
+                view.onDrag { provider(note) }
+            }
     }
 
     private func laneGutter(_ lane: UncertaintyLane, palette: UncertaintyPalette) -> some View {
