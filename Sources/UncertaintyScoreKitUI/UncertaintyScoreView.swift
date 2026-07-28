@@ -233,30 +233,49 @@ public struct UncertaintyScoreView: View {
                         }
                     }
                     .frame(height: 9)
+                    // EACH NAME STARTS WHERE ITS THING STARTS. A packed row can carry several notes, and a plain
+                    // list beneath it leaves the reader matching labels to bars by counting. Indenting a label to
+                    // its own bar's left edge ties the two without a leader line — and a name that would start so
+                    // far right that it could not be read pulls back to where it can.
                     ForEach(row) { note in
-                        Button { selection = note; onSelectNote?(note) } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(note.detail)
-                                    .font(.system(size: 11))
-                                    // The whole name, always. These are questions, and half a question is a
-                                    // different question.
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .multilineTextAlignment(.leading)
-                                Text(note.continuesPastEnd
-                                     ? "\(note.start)–\(note.end) · still open"
-                                     : "\(note.start)–\(note.end)")
-                                    .font(.system(size: 10)).monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        GeometryReader { proxy in
+                            let span = Double(max(1, score.spineEnd - score.spineStart + 1))
+                            let x = CGFloat(Double(note.start - score.spineStart) / span) * proxy.size.width
+                            noteLabel(note).offset(x: min(x, max(0, proxy.size.width - 220)))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("uncertainty-note-label-\(note.id)")
+                        .frame(height: labelHeight(note))
                     }
                 }
                 .opacity(visible ? 1 : 0.28)
             }
         }
+    }
+
+    /// Two lines' worth of room, or three when the name is long: a braid label wraps rather than truncating, so the
+    /// row it sits in has to make room for the wrap.
+    private func labelHeight(_ note: UncertaintyNote) -> CGFloat {
+        note.detail.count > 90 ? 44 : (note.detail.count > 45 ? 30 : 17)
+    }
+
+    @ViewBuilder
+    private func noteLabel(_ note: UncertaintyNote) -> some View {
+        Button { selection = note; onSelectNote?(note) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(note.detail)
+                    .font(.system(size: 11))
+                    // The whole name, always. These are questions, and half a question is a different question.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                Text(note.continuesPastEnd
+                     ? "\(note.start)–\(note.end) · still open"
+                     : "\(note.start)–\(note.end)")
+                    .font(.system(size: 10)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: 320, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("uncertainty-note-label-\(note.id)")
     }
 
     @ViewBuilder
