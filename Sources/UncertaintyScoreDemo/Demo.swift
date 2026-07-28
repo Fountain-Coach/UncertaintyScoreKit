@@ -25,6 +25,14 @@ struct UncertaintyScoreDemo {
             for (label, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
                 let url = outDir.appendingPathComponent("uncertainty-\(name)-\(label).png")
                 render(UncertaintyScoreView(score: score), scheme: scheme, to: url)
+                // A SELECTION HAS TO BE LOOKED AT TOO. Rendered with one note chosen, because "clicking highlights
+                // it" is a claim about pixels, and the outline that satisfied it at small size was invisible.
+                if name == "braided-chapter" {
+                    let selURL = outDir.appendingPathComponent("uncertainty-\(name)-selected-\(label).png")
+                    render(UncertaintyScoreView(score: score, selectedNoteId: .constant("beat-9")),
+                           scheme: scheme, to: selURL)
+                    FileHandle.standardError.write(Data("wrote \(selURL.path)\n".utf8))
+                }
                 FileHandle.standardError.write(Data("wrote \(url.path)\n".utf8))
             }
         }

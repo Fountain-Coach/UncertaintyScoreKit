@@ -108,7 +108,7 @@ public struct UncertaintyScoreView: View {
     private static let gutterWidth: CGFloat = 176
     private static let laneHeight: CGFloat = 34
     /// Tall enough to hit with a pointer, short enough that fifteen rows still fit on a stage.
-    private static let braidRowHeight: CGFloat = 12
+    private static let braidRowHeight: CGFloat = 22
 
     private var visibleLanes: [UncertaintyLane] {
         if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
@@ -230,7 +230,7 @@ public struct UncertaintyScoreView: View {
         let rows = lane.rows
         HStack(alignment: .top, spacing: 8) {
             laneGutter(lane, palette: palette)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 depthRibbon(rows: rows, visible: visible, palette: palette)
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GeometryReader { proxy in
@@ -243,9 +243,10 @@ public struct UncertaintyScoreView: View {
                                 // A bar sits INSIDE its row with air above and below. Filling the row edge to edge
                                 // made six packed rows read as one solid block, and a bar you cannot separate from
                                 // its neighbour is a bar you cannot follow across the chapter.
-                                let rect = CGRect(x: x0, y: 1.5, width: max(3, x1 - x0 - 1), height: size.height - 3)
-                                drawMark(&ctx, state: note.state, rect: rect, magnitude: note.magnitude,
-                                         palette: palette, selected: selection?.id == note.id)
+                                let rect = CGRect(x: x0, y: 2, width: max(4, x1 - x0 - 1), height: size.height - 4)
+                                drawBraidBar(&ctx, note: note, rect: rect, rowHeight: size.height,
+                                             palette: palette, selected: selection?.id == note.id,
+                                             dimmed: selection != nil && selection?.id != note.id)
                                 // No closing edge where nothing closed: the bar frays onward rather than ending, so
                                 // "still running when the observation stopped" needs no legend. It stops at the
                                 // next thing on this row — running the fray THROUGH a later note made the two read
@@ -257,7 +258,7 @@ public struct UncertaintyScoreView: View {
                                     var fade = Path()
                                     var x = rect.maxX + 3
                                     while x < limit {
-                                        fade.addRect(CGRect(x: x, y: rect.midY - 1, width: 3, height: 2))
+                                        fade.addRect(CGRect(x: x, y: rect.midY - 1.5, width: 4, height: 3))
                                         x += 7
                                     }
                                     ctx.fill(fade, with: .color(palette.stroke(for: note.state).opacity(0.5)))
@@ -306,7 +307,7 @@ public struct UncertaintyScoreView: View {
             }
             ctx.fill(bars, with: .color(palette.stroke(for: .ambiguity).opacity(0.28)))
         }
-        .frame(height: 14)
+        .frame(height: 24)
         .accessibilityHidden(true)
     }
 
@@ -454,6 +455,34 @@ public struct UncertaintyScoreView: View {
     }
 
     // MARK: Mark drawing — the shape half of the encoding
+
+    /// A BEAT IS A THING WITH A LIFE, SO IT IS DRAWN AS ONE SOLID RUN.
+    ///
+    /// `drawMark` draws a strip lane's *measurement* — a held dyad, two hairlines with a gap, which says "two
+    /// readings sounded at once" and is right for that. On a braid it read as a pair of threads that were never
+    /// there, and at row height it read as nothing at all. Here one bar is one thing, running for as long as it
+    /// runs.
+    ///
+    /// Selection has to be unmissable: the whole row lights behind the chosen bar, the bar takes the accent, and
+    /// everything else steps back. A 1.5-point outline on a 9-point bar was a selection only its author could see.
+    private func drawBraidBar(_ ctx: inout GraphicsContext, note: UncertaintyNote, rect: CGRect, rowHeight: CGFloat,
+                              palette: UncertaintyPalette, selected: Bool, dimmed: Bool) {
+        let base = palette.stroke(for: note.state)
+        if selected {
+            let halo = CGRect(x: rect.minX - 3, y: 0, width: rect.width + 6, height: rowHeight)
+            ctx.fill(Path(roundedRect: halo, cornerRadius: 4), with: .color(.accentColor.opacity(0.18)))
+        }
+        let body = selected ? Color.accentColor : base
+        let strength = selected ? 1.0 : (dimmed ? 0.34 : 0.72 + 0.24 * note.magnitude)
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(body.opacity(strength)))
+        if selected {
+            ctx.stroke(Path(roundedRect: rect.insetBy(dx: -1.5, dy: -1.5), cornerRadius: 4),
+                       with: .color(.accentColor), lineWidth: 2)
+        }
+        // The state still has to survive greyscale: a thin darker keel along the foot of the bar carries it.
+        let keel = CGRect(x: rect.minX, y: rect.maxY - 2, width: rect.width, height: 2)
+        ctx.fill(Path(roundedRect: keel, cornerRadius: 1), with: .color(body.opacity(selected ? 1 : strength * 0.7)))
+    }
 
     private func drawMark(_ ctx: inout GraphicsContext, state: UncertaintyState, rect: CGRect,
                           magnitude: Double, palette: UncertaintyPalette, selected: Bool) {
