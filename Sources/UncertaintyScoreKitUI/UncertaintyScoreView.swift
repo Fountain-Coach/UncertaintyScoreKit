@@ -108,7 +108,7 @@ public struct UncertaintyScoreView: View {
     private static let gutterWidth: CGFloat = 176
     private static let laneHeight: CGFloat = 34
     /// Tall enough to hit with a pointer, short enough that fifteen rows still fit on a stage.
-    private static let braidRowHeight: CGFloat = 9
+    private static let braidRowHeight: CGFloat = 12
 
     private var visibleLanes: [UncertaintyLane] {
         if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
@@ -230,25 +230,33 @@ public struct UncertaintyScoreView: View {
         let rows = lane.rows
         HStack(alignment: .top, spacing: 8) {
             laneGutter(lane, palette: palette)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 depthRibbon(rows: rows, visible: visible, palette: palette)
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GeometryReader { proxy in
                         Canvas { ctx, size in
                             guard visible, score.spineEnd > score.spineStart else { return }
                             let span = Double(score.spineEnd - score.spineStart + 1)
-                            for note in row {
+                            for (i, note) in row.enumerated() {
                                 let x0 = CGFloat(Double(note.start - score.spineStart) / span) * size.width
                                 let x1 = CGFloat(Double(note.end - score.spineStart + 1) / span) * size.width
-                                let rect = CGRect(x: x0, y: 0, width: max(3, x1 - x0 - 1), height: size.height)
+                                // A bar sits INSIDE its row with air above and below. Filling the row edge to edge
+                                // made six packed rows read as one solid block, and a bar you cannot separate from
+                                // its neighbour is a bar you cannot follow across the chapter.
+                                let rect = CGRect(x: x0, y: 1.5, width: max(3, x1 - x0 - 1), height: size.height - 3)
                                 drawMark(&ctx, state: note.state, rect: rect, magnitude: note.magnitude,
                                          palette: palette, selected: selection?.id == note.id)
-                                // No closing edge where nothing closed: the bar frays into the margin rather than
-                                // ending, so "still running when the observation stopped" needs no legend.
+                                // No closing edge where nothing closed: the bar frays onward rather than ending, so
+                                // "still running when the observation stopped" needs no legend. It stops at the
+                                // next thing on this row — running the fray THROUGH a later note made the two read
+                                // as one broken bar, which is the opposite of what the packing is for.
                                 if note.continuesPastEnd {
+                                    let limit: CGFloat = i + 1 < row.count
+                                        ? CGFloat(Double(row[i + 1].start - score.spineStart) / span) * size.width - 3
+                                        : size.width - 1
                                     var fade = Path()
-                                    var x = rect.maxX + 2
-                                    while x < size.width - 1 {
+                                    var x = rect.maxX + 3
+                                    while x < limit {
                                         fade.addRect(CGRect(x: x, y: rect.midY - 1, width: 3, height: 2))
                                         x += 7
                                     }

@@ -11,6 +11,50 @@ enum Fixtures {
         UncertaintyNote(id: id, start: s, end: e, state: state, magnitude: mag, detail: detail, resolvedBy: by)
     }
 
+    // MARK: - A chapter carrying many questions at once — the braid at the scale that breaks a strip
+
+    /// EIGHTEEN THINGS ALIVE IN ONE CHAPTER. Three notes on a lane can be drawn any way at all; the drawing has to
+    /// survive the real case, where a close reading of one episode holds fifteen or forty questions, several of
+    /// them open at the same moment and each named by a whole sentence. This fixture exists to be LOOKED AT: if
+    /// the braid is unreadable here, it is unreadable in the app.
+    static var braidedChapter: UncertaintyScore {
+        let questions: [(Int, Int, String, Bool)] = [
+            (1, 1118, "Will Buck Mulligan and Stephen Dedalus's conflict escalate?", true),
+            (1, 105, "What is the significance of Buck Mulligan's blessing?", false),
+            (14, 96, "Why does Mulligan perform the mass at the parapet?", false),
+            (60, 240, "What does Stephen owe his mother now that she is dead?", true),
+            (88, 152, "Will Stephen admit why he would not kneel?", false),
+            (130, 1118, "What will happen next between Stephen and Buck?", true),
+            (168, 300, "Who is Haines, and what is he doing in the tower?", false),
+            (196, 410, "Does Stephen intend to come back to the tower tonight?", true),
+            (240, 288, "What did the aunt mean by 'you killed your mother'?", false),
+            (300, 470, "Why does the sea keep returning as the mother?", true),
+            (352, 640, "Is Mulligan's mockery affection or contempt?", true),
+            (410, 512, "What does Stephen want from the milkwoman?", false),
+            (455, 700, "Who holds the key to the tower, and what does holding it mean?", true),
+            (512, 604, "Will Haines's dream of the panther matter again?", false),
+            (610, 880, "Is Stephen's poverty a choice he is making?", true),
+            (700, 1050, "What is Stephen's quarrel with the Irish revival?", true),
+            (812, 968, "Does Stephen believe what he says about the church?", false),
+            (900, 1118, "Where will Stephen sleep tonight?", true)
+        ]
+        let notes = questions.enumerated().map { i, q in
+            UncertaintyNote(id: "beat-\(i)", start: q.0, end: q.1, state: .ambiguity,
+                            detail: q.2, resolvedBy: q.3 ? "answer it, or read on to where the story does" : nil,
+                            continuesPastEnd: q.3)
+        }
+        return UncertaintyScore(
+            title: "This reading", spineStart: 1, spineEnd: 1118, itemCount: 45,
+            lanes: [
+                UncertaintyLane(id: "structure", title: "Structure read", isFailureAxis: true, notes: [
+                    note("s-0", 1, 400, .settled, "Read and confident here."),
+                    note("s-1", 401, 840, .settled, "Read and confident here."),
+                    note("s-2", 841, 1118, .thin, "Read thinly — the passages here were long.", "re-observe")
+                ]),
+                UncertaintyLane(id: "beats", title: "Beats — questions held open", notes: notes, presentation: .braid)
+            ])
+    }
+
     // MARK: - Telemachus (Ulysses, episode 1) — what a first on-device read plausibly leaves open
 
     static var telemachus: UncertaintyScore {

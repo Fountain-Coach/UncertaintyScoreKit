@@ -18,7 +18,8 @@ struct UncertaintyScoreDemo {
 
         let scores: [(String, UncertaintyScore)] = [
             ("telemachus", Fixtures.telemachus),
-            ("log-triage", Fixtures.logTriage)
+            ("log-triage", Fixtures.logTriage),
+            ("braided-chapter", Fixtures.braidedChapter)
         ]
         for (name, score) in scores {
             for (label, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
