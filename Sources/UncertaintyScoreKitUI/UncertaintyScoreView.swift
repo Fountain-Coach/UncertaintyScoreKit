@@ -179,6 +179,88 @@ public struct UncertaintyScoreView: View {
 
     @ViewBuilder
     private func laneRow(_ lane: UncertaintyLane) -> some View {
+        if lane.presentation == .braid {
+            braidLane(lane)
+        } else {
+            stripLane(lane)
+        }
+    }
+
+    /// A LANE OF THINGS WITH LIVES: each note on its own packed row, each drawn over the span it covers, each
+    /// carrying its name where the name can actually be read.
+    ///
+    /// The strip drawing answers "how uncertain is it here?". This one answers "what is running here, and for how
+    /// long?" — a different question, and the one a lane of parallel things is asked. Depth is read by looking
+    /// down: three rows deep at a position means three things alive at once.
+    @ViewBuilder
+    private func braidLane(_ lane: UncertaintyLane) -> some View {
+        let palette = UncertaintyPalette(scheme)
+        let visible = isVisible(lane)
+        VStack(alignment: .leading, spacing: 7) {
+            laneGutter(lane, palette: palette).frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(lane.rows.enumerated()), id: \.offset) { _, row in
+                VStack(alignment: .leading, spacing: 3) {
+                    GeometryReader { proxy in
+                        Canvas { ctx, size in
+                            let baseline = CGRect(x: 0, y: size.height - 1, width: size.width, height: 1)
+                            ctx.fill(Path(baseline), with: .color(.secondary.opacity(0.12)))
+                            guard visible, score.spineEnd > score.spineStart else { return }
+                            let span = Double(score.spineEnd - score.spineStart + 1)
+                            for note in row {
+                                let x0 = CGFloat(Double(note.start - score.spineStart) / span) * size.width
+                                let x1 = CGFloat(Double(note.end - score.spineStart + 1) / span) * size.width
+                                let rect = CGRect(x: x0, y: 1, width: max(3, x1 - x0 - 1), height: size.height - 3)
+                                drawMark(&ctx, state: note.state, rect: rect, magnitude: note.magnitude,
+                                         palette: palette, selected: selection?.id == note.id)
+                                // No closing edge where nothing closed: the bar frays into the margin instead of
+                                // ending, so "still running when the reading stopped" is visible without a legend.
+                                if note.continuesPastEnd {
+                                    var fade = Path()
+                                    let y = rect.midY
+                                    var x = rect.maxX + 2
+                                    while x < size.width - 1 {
+                                        fade.addRect(CGRect(x: x, y: y - 1, width: 3, height: 2))
+                                        x += 7
+                                    }
+                                    ctx.fill(fade, with: .color(palette.stroke(for: note.state).opacity(0.45)))
+                                }
+                            }
+                        }
+                        .overlay(alignment: .leading) {
+                            markAccessibilityLayer(UncertaintyLane(id: lane.id, title: lane.title,
+                                                                   isFailureAxis: lane.isFailureAxis, notes: row),
+                                                   visible: visible, width: proxy.size.width)
+                        }
+                    }
+                    .frame(height: 9)
+                    ForEach(row) { note in
+                        Button { selection = note; onSelectNote?(note) } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(note.detail)
+                                    .font(.system(size: 11))
+                                    // The whole name, always. These are questions, and half a question is a
+                                    // different question.
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                                Text(note.continuesPastEnd
+                                     ? "\(note.start)–\(note.end) · still open"
+                                     : "\(note.start)–\(note.end)")
+                                    .font(.system(size: 10)).monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("uncertainty-note-label-\(note.id)")
+                    }
+                }
+                .opacity(visible ? 1 : 0.28)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func stripLane(_ lane: UncertaintyLane) -> some View {
         let palette = UncertaintyPalette(scheme)
         let visible = isVisible(lane)
         HStack(spacing: 8) {
@@ -262,7 +344,10 @@ public struct UncertaintyScoreView: View {
             Circle().fill(palette.stroke(for: lane.peakState).opacity(lane.peakState == .settled ? 0.4 : 0.9))
                 .frame(width: 7, height: 7)
             Text(lane.title).font(.system(size: 11, weight: lane.isFailureAxis ? .semibold : .regular))
-                .lineLimit(1).truncationMode(.tail)
+                // A lane's title is its identity. Truncating it ("Beats — questions held o…") makes the writer
+                // guess at what they are looking at, so it wraps instead and the gutter grows.
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
                 .foregroundStyle(isVisible(lane) ? .primary : .secondary)
             Spacer(minLength: 0)
             mixButton("S", on: soloed.contains(lane.id)) { toggle(&soloed, lane.id) }

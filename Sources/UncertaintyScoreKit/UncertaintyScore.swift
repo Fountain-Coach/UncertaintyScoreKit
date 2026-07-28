@@ -66,6 +66,11 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
     /// The cheapest next operation that could close this, phrased for a human ("paid escalation", "re-observe").
     /// `nil` means nothing closes it more cheaply than it already is.
     public let resolvedBy: String?
+    /// TRUE WHEN THE SPAN ENDS BECAUSE THE OBSERVATION ENDED, not because the openness did. A question a story is
+    /// still holding where the reading stops has no closing edge, and drawing one asserts a resolution nobody
+    /// found. Distinct from `resolvedBy`, which is about the cheapest way to close something — this is about
+    /// whether it closed at all.
+    public let continuesPastEnd: Bool
 
     public init(
         id: String,
@@ -74,7 +79,8 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
         state: UncertaintyState,
         magnitude: Double? = nil,
         detail: String = "",
-        resolvedBy: String? = nil
+        resolvedBy: String? = nil,
+        continuesPastEnd: Bool = false
     ) {
         self.id = id
         self.start = Swift.min(start, end)
@@ -83,6 +89,21 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
         self.magnitude = Swift.min(1, Swift.max(0, magnitude ?? state.weight))
         self.detail = detail
         self.resolvedBy = resolvedBy
+        self.continuesPastEnd = continuesPastEnd
+    }
+
+    /// Decoded field by field so a score written before this field existed still reads. A stored map is a record of
+    /// a reading that happened; a new field must never make an old reading unreadable.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.start = try c.decode(Int.self, forKey: .start)
+        self.end = try c.decode(Int.self, forKey: .end)
+        self.state = try c.decode(UncertaintyState.self, forKey: .state)
+        self.magnitude = try c.decode(Double.self, forKey: .magnitude)
+        self.detail = try c.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        self.resolvedBy = try c.decodeIfPresent(String.self, forKey: .resolvedBy)
+        self.continuesPastEnd = try c.decodeIfPresent(Bool.self, forKey: .continuesPastEnd) ?? false
     }
 
     public var span: ClosedRange<Int> { start...end }
@@ -100,12 +121,56 @@ public struct UncertaintyLane: Codable, Sendable, Identifiable, Equatable {
     /// read". A renderer uses this to decide how loud a breakdown here should be.
     public let isFailureAxis: Bool
     public let notes: [UncertaintyNote]
+    /// How this lane is meant to be read. See `Presentation`.
+    public let presentation: Presentation
 
-    public init(id: String, title: String, isFailureAxis: Bool = false, notes: [UncertaintyNote]) {
+    /// A LANE IS EITHER ONE MEASUREMENT OR SEVERAL THINGS RUNNING AT ONCE, and those want opposite drawings.
+    ///
+    /// `.strip` is the original: one row, notes laid along it, identity carried by the lane. It is right when the
+    /// notes are readings of one dimension and cannot meaningfully overlap.
+    ///
+    /// `.braid` is for lanes whose notes are SEPARATE THINGS WITH LIVES — each with its own span, several alive at
+    /// the same position, each with a name that has to be read. On a strip they overdraw into one smear at exactly
+    /// the places where the overlap is the point.
+    public enum Presentation: String, Codable, Sendable {
+        case strip
+        case braid
+    }
+
+    public init(id: String, title: String, isFailureAxis: Bool = false, notes: [UncertaintyNote],
+                presentation: Presentation = .strip) {
         self.id = id
         self.title = title
         self.isFailureAxis = isFailureAxis
         self.notes = notes.sorted { $0.start < $1.start }
+        self.presentation = presentation
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.isFailureAxis = try c.decode(Bool.self, forKey: .isFailureAxis)
+        self.notes = try c.decode([UncertaintyNote].self, forKey: .notes)
+        self.presentation = try c.decodeIfPresent(Presentation.self, forKey: .presentation) ?? .strip
+    }
+
+    /// THE NOTES PACKED INTO ROWS SO NOTHING IS DRAWN ON TOP OF ANYTHING.
+    ///
+    /// Greedy first-fit over notes in start order: each note goes on the first row whose last note ends before it
+    /// begins. Two things that never overlap share a row; things alive at the same time get rows of their own, so
+    /// the number of rows at a position IS how many things are running there, and depth becomes visible rather
+    /// than needing to be stated.
+    public var rows: [[UncertaintyNote]] {
+        var rows: [[UncertaintyNote]] = []
+        for note in notes {
+            if let index = rows.firstIndex(where: { ($0.last?.end ?? Int.min) < note.start }) {
+                rows[index].append(note)
+            } else {
+                rows.append([note])
+            }
+        }
+        return rows
     }
 
     /// The worst thing this lane says anywhere — for the mixer chip's at-a-glance colour.

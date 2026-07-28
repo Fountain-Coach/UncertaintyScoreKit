@@ -58,3 +58,57 @@ final class UncertaintyScoreTests: XCTestCase {
         XCTAssertEqual(lane.peakState, .ambiguity)
     }
 }
+
+// MARK: - A lane of things with lives (braid)
+
+/// A braid lane carries several things running at once — questions a story holds open, say — and the whole point is
+/// that they overlap. These are about the packing that keeps them from being drawn on top of each other.
+final class BraidLaneTests: XCTestCase {
+
+    private func note(_ id: String, _ start: Int, _ end: Int, open: Bool = false) -> UncertaintyNote {
+        .init(id: id, start: start, end: end, state: .ambiguity, detail: "q\(id)", continuesPastEnd: open)
+    }
+
+    func testThingsAliveAtOnceGetRowsOfTheirOwn() {
+        let lane = UncertaintyLane(id: "beats", title: "Beats", notes: [
+            note("a", 1, 100), note("b", 40, 200), note("c", 60, 90)
+        ], presentation: .braid)
+        XCTAssertEqual(lane.rows.count, 3, "Three questions alive at l. 60 is three rows, never one smear.")
+    }
+
+    func testThingsThatNeverOverlapShareARow() {
+        let lane = UncertaintyLane(id: "beats", title: "Beats", notes: [
+            note("a", 1, 50), note("b", 60, 100), note("c", 110, 160)
+        ], presentation: .braid)
+        XCTAssertEqual(lane.rows.count, 1, "A sequence of finished questions is one row — depth of one.")
+        XCTAssertEqual(lane.rows[0].count, 3)
+    }
+
+    func testRowsCoverEveryNoteExactlyOnce() {
+        let notes = [note("a", 1, 100), note("b", 40, 200), note("c", 60, 90), note("d", 210, 260)]
+        let lane = UncertaintyLane(id: "beats", title: "Beats", notes: notes, presentation: .braid)
+        let packed = lane.rows.flatMap { $0 }.map(\.id).sorted()
+        XCTAssertEqual(packed, ["a", "b", "c", "d"], "Packing may reorder, never lose or duplicate.")
+    }
+
+    func testAScoreWrittenBeforeTheseFieldsExistedStillReads() throws {
+        // A stored map is the record of a reading that happened; a new field must not make an old reading unreadable.
+        let legacy = """
+        {"title":"This reading","spineStart":1,"spineEnd":500,"itemCount":2,
+         "lanes":[{"id":"l","title":"Structure read","isFailureAxis":false,
+           "notes":[{"id":"n","start":1,"end":40,"state":"ambiguity","magnitude":0.7,"detail":"unsettled"}]}]}
+        """
+        let score = try JSONDecoder().decode(UncertaintyScore.self, from: Data(legacy.utf8))
+        XCTAssertEqual(score.lanes.first?.presentation, .strip, "An old lane is a strip — the drawing it was made for.")
+        XCTAssertEqual(score.lanes.first?.notes.first?.continuesPastEnd, false)
+    }
+
+    func testAnOpenEndedNoteSurvivesARoundTrip() throws {
+        let score = UncertaintyScore(title: "t", spineStart: 1, spineEnd: 300, itemCount: 1, lanes: [
+            UncertaintyLane(id: "beats", title: "Beats", notes: [note("a", 1, 300, open: true)], presentation: .braid)
+        ])
+        let back = try JSONDecoder().decode(UncertaintyScore.self, from: JSONEncoder().encode(score))
+        XCTAssertEqual(back, score)
+        XCTAssertTrue(back.lanes[0].notes[0].continuesPastEnd)
+    }
+}
