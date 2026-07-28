@@ -64,6 +64,14 @@ private struct UncertaintyPalette {
 ///
 /// Hues walk by the golden angle, so neighbours in a packed row are far apart on the wheel however many there are,
 /// and the walk is deterministic: the same index is the same colour on every render and across relaunches.
+extension View {
+    /// Apply a modifier only when the optional it depends on is present — used so a score without a drag provider
+    /// carries no drag gesture at all rather than an inert one.
+    @ViewBuilder func ifLet<T, Content: View>(_ value: T?, transform: (Self, T) -> Content) -> some View {
+        if let value { transform(self, value) } else { self }
+    }
+}
+
 public enum UncertaintyBraidPalette {
     public static func tint(index: Int, scheme: ColorScheme = .light) -> Color {
         let hue = (Double(index) * 0.6180339887).truncatingRemainder(dividingBy: 1)
@@ -117,12 +125,19 @@ public struct UncertaintyScoreView: View {
 
     public init(score: UncertaintyScore, selectedNoteId: Binding<String?>,
                 showsSelectionDetail: Bool = true,
+                dragProvider: ((UncertaintyNote) -> NSItemProvider)? = nil,
                 onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
         self.onSelectNote = onSelectNote
         self.selectionBinding = selectedNoteId
         self.showsSelectionDetail = showsSelectionDetail
+        self.dragProvider = dragProvider
     }
+
+    /// THE MARK ITSELF IS THE HANDLE. A host that can do something with a note — hand it to something else, cite
+    /// it, wire it up — should let the writer take hold of the THING, not of a label that stands next to it. The
+    /// drawn span is what they are looking at, so the drawn span is what they pick up.
+    private var dragProvider: ((UncertaintyNote) -> NSItemProvider)?
 
     /// WHEN THE HOST ALREADY SHOWS THE NAMES, THE MAP MUST NOT SHOW THEM AGAIN. The same sentence printed twice on
     /// one screen is not emphasis, it is noise competing with itself — and it costs the room the map needs.
@@ -414,9 +429,10 @@ public struct UncertaintyScoreView: View {
                                             + (note.detail.isEmpty ? "" : ". \(note.detail)"))
                         .accessibilityValue(note.resolvedBy.map { "Closed by \($0)" } ?? "")
                         .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
-                        .accessibilityAction {
-                            select(note)
-                            onSelectNote?(note)
+                        .accessibilityAction { select(note) }
+                        .contentShape(Rectangle())
+                        .ifLet(dragProvider) { view, provider in
+                            view.onDrag { provider(note) }
                         }
                 }
             }
