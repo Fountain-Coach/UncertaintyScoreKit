@@ -56,6 +56,23 @@ private struct UncertaintyPalette {
 
 // MARK: - View
 
+/// THE COLOUR A BRAIDED THING IS KNOWN BY, everywhere it appears.
+///
+/// A braid draws many things at once, and a bar's position tells you WHERE it runs but not WHICH it is. Colour
+/// gives each one an identity that survives leaving the map: the host paints the same thing — the passage it
+/// covers, its row in a list, a chip on a card — with the same colour, and the writer never has to re-find it.
+///
+/// Hues walk by the golden angle, so neighbours in a packed row are far apart on the wheel however many there are,
+/// and the walk is deterministic: the same index is the same colour on every render and across relaunches.
+public enum UncertaintyBraidPalette {
+    public static func tint(index: Int, scheme: ColorScheme = .light) -> Color {
+        let hue = (Double(index) * 0.6180339887).truncatingRemainder(dividingBy: 1)
+        return scheme == .dark
+            ? Color(hue: hue, saturation: 0.55, brightness: 0.86)
+            : Color(hue: hue, saturation: 0.62, brightness: 0.74)
+    }
+}
+
 public struct UncertaintyScoreView: View {
     public let score: UncertaintyScore
     /// Called when the reader clicks a mark, with the note under the click.
@@ -99,16 +116,31 @@ public struct UncertaintyScoreView: View {
     }
 
     public init(score: UncertaintyScore, selectedNoteId: Binding<String?>,
+                showsSelectionDetail: Bool = true,
                 onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
         self.onSelectNote = onSelectNote
         self.selectionBinding = selectedNoteId
+        self.showsSelectionDetail = showsSelectionDetail
     }
+
+    /// WHEN THE HOST ALREADY SHOWS THE NAMES, THE MAP MUST NOT SHOW THEM AGAIN. The same sentence printed twice on
+    /// one screen is not emphasis, it is noise competing with itself — and it costs the room the map needs.
+    private var showsSelectionDetail: Bool = true
 
     private static let gutterWidth: CGFloat = 176
     private static let laneHeight: CGFloat = 34
     /// Tall enough to hit with a pointer, short enough that fifteen rows still fit on a stage.
     private static let braidRowHeight: CGFloat = 22
+
+    /// A note's position in its own lane — the seed of its colour, computed once for the whole score.
+    private var indexInLane: [String: Int] {
+        var map: [String: Int] = [:]
+        for lane in score.lanes {
+            for (i, note) in lane.notes.enumerated() { map[note.id] = i }
+        }
+        return map
+    }
 
     private var visibleLanes: [UncertaintyLane] {
         if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
@@ -129,7 +161,7 @@ public struct UncertaintyScoreView: View {
                     laneRow(lane)
                 }
             }
-            selectionDetail
+            if showsSelectionDetail { selectionDetail }
         }
         .padding(18)
         .frame(minWidth: 620, alignment: .topLeading)
@@ -245,7 +277,9 @@ public struct UncertaintyScoreView: View {
                                 // its neighbour is a bar you cannot follow across the chapter.
                                 let rect = CGRect(x: x0, y: 2, width: max(4, x1 - x0 - 1), height: size.height - 4)
                                 drawBraidBar(&ctx, note: note, rect: rect, rowHeight: size.height,
-                                             palette: palette, selected: selection?.id == note.id,
+                                             tint: UncertaintyBraidPalette.tint(index: indexInLane[note.id] ?? 0,
+                                                                                scheme: scheme),
+                                             selected: selection?.id == note.id,
                                              dimmed: selection != nil && selection?.id != note.id)
                                 // No closing edge where nothing closed: the bar frays onward rather than ending, so
                                 // "still running when the observation stopped" needs no legend. It stops at the
@@ -261,7 +295,7 @@ public struct UncertaintyScoreView: View {
                                         fade.addRect(CGRect(x: x, y: rect.midY - 1.5, width: 4, height: 3))
                                         x += 7
                                     }
-                                    ctx.fill(fade, with: .color(palette.stroke(for: note.state).opacity(0.5)))
+                                    ctx.fill(fade, with: .color(UncertaintyBraidPalette.tint(index: indexInLane[note.id] ?? 0, scheme: scheme).opacity(0.55)))
                                 }
                             }
                         }
@@ -466,18 +500,19 @@ public struct UncertaintyScoreView: View {
     /// Selection has to be unmissable: the whole row lights behind the chosen bar, the bar takes the accent, and
     /// everything else steps back. A 1.5-point outline on a 9-point bar was a selection only its author could see.
     private func drawBraidBar(_ ctx: inout GraphicsContext, note: UncertaintyNote, rect: CGRect, rowHeight: CGFloat,
-                              palette: UncertaintyPalette, selected: Bool, dimmed: Bool) {
-        let base = palette.stroke(for: note.state)
+                              tint: Color, selected: Bool, dimmed: Bool) {
+        let base = tint
         if selected {
             let halo = CGRect(x: rect.minX - 3, y: 0, width: rect.width + 6, height: rowHeight)
-            ctx.fill(Path(roundedRect: halo, cornerRadius: 4), with: .color(.accentColor.opacity(0.18)))
+            ctx.fill(Path(roundedRect: halo, cornerRadius: 4), with: .color(base.opacity(0.22)))
         }
-        let body = selected ? Color.accentColor : base
+        // The colour IS the identity, so selection cannot recolour it — it lights it and steps the others back.
+        let body = base
         let strength = selected ? 1.0 : (dimmed ? 0.34 : 0.72 + 0.24 * note.magnitude)
         ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(body.opacity(strength)))
         if selected {
             ctx.stroke(Path(roundedRect: rect.insetBy(dx: -1.5, dy: -1.5), cornerRadius: 4),
-                       with: .color(.accentColor), lineWidth: 2)
+                       with: .color(.primary.opacity(0.75)), lineWidth: 2)
         }
         // The state still has to survive greyscale: a thin darker keel along the foot of the bar carries it.
         let keel = CGRect(x: rect.minX, y: rect.maxY - 2, width: rect.width, height: 2)
