@@ -72,15 +72,43 @@ public struct UncertaintyScoreView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var muted: Set<String> = []
     @State private var soloed: Set<String> = []
-    @State private var selection: UncertaintyNote?
+    @State private var internalSelection: UncertaintyNote?
+    /// WHEN THE HOST SHOWS THE SAME NOTES SOMEWHERE ELSE, THERE IS ONLY ONE SELECTION.
+    ///
+    /// A lane of many things needs its names shown outside the map — a list, a panel — and two selections for one
+    /// set of things means clicking a name and clicking its bar disagree about what is chosen. Bound, the map and
+    /// the host's own view of the same notes stay one thing; unbound, the view keeps owning its selection as before.
+    private var selectionBinding: Binding<String?>?
+
+    private var selection: UncertaintyNote? {
+        if let id = selectionBinding?.wrappedValue {
+            return score.lanes.flatMap(\.notes).first { $0.id == id }
+        }
+        return internalSelection
+    }
+
+    private func select(_ note: UncertaintyNote) {
+        if let binding = selectionBinding { binding.wrappedValue = note.id } else { internalSelection = note }
+        onSelectNote?(note)
+    }
 
     public init(score: UncertaintyScore, onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
         self.onSelectNote = onSelectNote
+        self.selectionBinding = nil
+    }
+
+    public init(score: UncertaintyScore, selectedNoteId: Binding<String?>,
+                onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
+        self.score = score
+        self.onSelectNote = onSelectNote
+        self.selectionBinding = selectedNoteId
     }
 
     private static let gutterWidth: CGFloat = 176
     private static let laneHeight: CGFloat = 34
+    /// Tall enough to hit with a pointer, short enough that fifteen rows still fit on a stage.
+    private static let braidRowHeight: CGFloat = 9
 
     private var visibleLanes: [UncertaintyLane] {
         if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
@@ -186,45 +214,56 @@ public struct UncertaintyScoreView: View {
         }
     }
 
-    /// A LANE OF THINGS WITH LIVES: each note on its own packed row, each drawn over the span it covers, each
-    /// carrying its name where the name can actually be read.
+    /// A LANE OF THINGS WITH LIVES — the shape only, because names do not stack.
     ///
-    /// The strip drawing answers "how uncertain is it here?". This one answers "what is running here, and for how
-    /// long?" — a different question, and the one a lane of parallel things is asked. Depth is read by looking
-    /// down: three rows deep at a position means three things alive at once.
+    /// A chapter can hold forty questions at once. Writing each one beside its bar was legible at three and a wall
+    /// of prose at fifteen, and shortening the names is not available: a half-question is a different question.
+    /// So the map carries what a map carries — WHERE each thing runs, HOW LONG, HOW MANY at once — and the names
+    /// live in the host's own list beside it, sharing one selection. Bars, not labels; the depth line above says
+    /// how crowded the story is at each point without naming anything.
+    ///
+    /// Selecting a bar reports it, and the host highlights whatever the span means in its own terms.
     @ViewBuilder
     private func braidLane(_ lane: UncertaintyLane) -> some View {
         let palette = UncertaintyPalette(scheme)
         let visible = isVisible(lane)
-        VStack(alignment: .leading, spacing: 7) {
-            laneGutter(lane, palette: palette).frame(maxWidth: .infinity, alignment: .leading)
-            ForEach(Array(lane.rows.enumerated()), id: \.offset) { _, row in
-                VStack(alignment: .leading, spacing: 3) {
+        let rows = lane.rows
+        HStack(alignment: .top, spacing: 8) {
+            laneGutter(lane, palette: palette)
+            VStack(alignment: .leading, spacing: 2) {
+                depthRibbon(rows: rows, visible: visible, palette: palette)
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GeometryReader { proxy in
                         Canvas { ctx, size in
-                            let baseline = CGRect(x: 0, y: size.height - 1, width: size.width, height: 1)
-                            ctx.fill(Path(baseline), with: .color(.secondary.opacity(0.12)))
                             guard visible, score.spineEnd > score.spineStart else { return }
                             let span = Double(score.spineEnd - score.spineStart + 1)
                             for note in row {
                                 let x0 = CGFloat(Double(note.start - score.spineStart) / span) * size.width
                                 let x1 = CGFloat(Double(note.end - score.spineStart + 1) / span) * size.width
-                                let rect = CGRect(x: x0, y: 1, width: max(3, x1 - x0 - 1), height: size.height - 3)
+                                let rect = CGRect(x: x0, y: 0, width: max(3, x1 - x0 - 1), height: size.height)
                                 drawMark(&ctx, state: note.state, rect: rect, magnitude: note.magnitude,
                                          palette: palette, selected: selection?.id == note.id)
-                                // No closing edge where nothing closed: the bar frays into the margin instead of
-                                // ending, so "still running when the reading stopped" is visible without a legend.
+                                // No closing edge where nothing closed: the bar frays into the margin rather than
+                                // ending, so "still running when the observation stopped" needs no legend.
                                 if note.continuesPastEnd {
                                     var fade = Path()
-                                    let y = rect.midY
                                     var x = rect.maxX + 2
                                     while x < size.width - 1 {
-                                        fade.addRect(CGRect(x: x, y: y - 1, width: 3, height: 2))
+                                        fade.addRect(CGRect(x: x, y: rect.midY - 1, width: 3, height: 2))
                                         x += 7
                                     }
-                                    ctx.fill(fade, with: .color(palette.stroke(for: note.state).opacity(0.45)))
+                                    ctx.fill(fade, with: .color(palette.stroke(for: note.state).opacity(0.5)))
                                 }
                             }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { location in
+                            guard visible, score.spineEnd > score.spineStart else { return }
+                            let span = Double(score.spineEnd - score.spineStart + 1)
+                            let pos = score.spineStart + Int(location.x / proxy.size.width * span)
+                            // Within this ROW only: two things on one row never overlap, so a click is unambiguous
+                            // — which is the reason for packing rather than drawing everything on one strip.
+                            if let hit = row.first(where: { $0.span.contains(pos) }) { select(hit) }
                         }
                         .overlay(alignment: .leading) {
                             markAccessibilityLayer(UncertaintyLane(id: lane.id, title: lane.title,
@@ -232,50 +271,35 @@ public struct UncertaintyScoreView: View {
                                                    visible: visible, width: proxy.size.width)
                         }
                     }
-                    .frame(height: 9)
-                    // EACH NAME STARTS WHERE ITS THING STARTS. A packed row can carry several notes, and a plain
-                    // list beneath it leaves the reader matching labels to bars by counting. Indenting a label to
-                    // its own bar's left edge ties the two without a leader line — and a name that would start so
-                    // far right that it could not be read pulls back to where it can.
-                    ForEach(row) { note in
-                        GeometryReader { proxy in
-                            let span = Double(max(1, score.spineEnd - score.spineStart + 1))
-                            let x = CGFloat(Double(note.start - score.spineStart) / span) * proxy.size.width
-                            noteLabel(note).offset(x: min(x, max(0, proxy.size.width - 220)))
-                        }
-                        .frame(height: labelHeight(note))
-                    }
+                    .frame(height: Self.braidRowHeight)
                 }
-                .opacity(visible ? 1 : 0.28)
             }
+            .opacity(visible ? 1 : 0.28)
         }
     }
 
-    /// Two lines' worth of room, or three when the name is long: a braid label wraps rather than truncating, so the
-    /// row it sits in has to make room for the wrap.
-    private func labelHeight(_ note: UncertaintyNote) -> CGFloat {
-        note.detail.count > 90 ? 44 : (note.detail.count > 45 ? 30 : 17)
-    }
-
+    /// HOW MANY THINGS ARE ALIVE AT EACH POINT, as a shape. The braid's rows already answer it by eye at small
+    /// counts; past a dozen the rows are too many to count, and this says "the story is carrying six things here,
+    /// one here" in a single glance — the texture of a chapter, before any name is read.
     @ViewBuilder
-    private func noteLabel(_ note: UncertaintyNote) -> some View {
-        Button { selection = note; onSelectNote?(note) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(note.detail)
-                    .font(.system(size: 11))
-                    // The whole name, always. These are questions, and half a question is a different question.
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
-                Text(note.continuesPastEnd
-                     ? "\(note.start)–\(note.end) · still open"
-                     : "\(note.start)–\(note.end)")
-                    .font(.system(size: 10)).monospacedDigit()
-                    .foregroundStyle(.secondary)
+    private func depthRibbon(rows: [[UncertaintyNote]], visible: Bool, palette: UncertaintyPalette) -> some View {
+        Canvas { ctx, size in
+            guard visible, score.spineEnd > score.spineStart, !rows.isEmpty else { return }
+            let span = Double(score.spineEnd - score.spineStart + 1)
+            let notes = rows.flatMap { $0 }
+            let maxDepth = max(1, rows.count)
+            var bars = Path()
+            for px in stride(from: 0, to: Int(size.width), by: 1) {
+                let pos = score.spineStart + Int(Double(px) / size.width * span)
+                let depth = notes.reduce(0) { $0 + ($1.span.contains(pos) ? 1 : 0) }
+                guard depth > 0 else { continue }
+                let h = size.height * CGFloat(depth) / CGFloat(maxDepth)
+                bars.addRect(CGRect(x: CGFloat(px), y: size.height - h, width: 1.2, height: h))
             }
-            .frame(maxWidth: 320, alignment: .leading)
+            ctx.fill(bars, with: .color(palette.stroke(for: .ambiguity).opacity(0.28)))
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("uncertainty-note-label-\(note.id)")
+        .frame(height: 14)
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -305,8 +329,7 @@ public struct UncertaintyScoreView: View {
                     let span = Double(score.spineEnd - score.spineStart + 1)
                     let pos = score.spineStart + Int(location.x / proxy.size.width * span)
                     if let hit = lane.note(at: pos) {
-                        selection = hit
-                        onSelectNote?(hit)
+                        select(hit)
                     }
                 }
                 // FCIS-AX: A CANVAS IS OPAQUE TO THE ACCESSIBILITY TREE. The marks were drawn pixels with a single
@@ -349,7 +372,7 @@ public struct UncertaintyScoreView: View {
                         .accessibilityValue(note.resolvedBy.map { "Closed by \($0)" } ?? "")
                         .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
                         .accessibilityAction {
-                            selection = note
+                            select(note)
                             onSelectNote?(note)
                         }
                 }
