@@ -456,6 +456,12 @@ public struct UncertaintyScoreView: View {
             .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { select(note) }
             .contentShape(Rectangle())
+            // WHAT THIS BAND IS, ON HOVER. A braid carries no labels by design — names do not stack — but a
+            // wordless bar is only legible once you already know what it is. The tooltip is the cheapest way to
+            // ask "and this one?" without spending the room a label would.
+            .help(spokenName.isEmpty
+                  ? "\(lane.title), lines \(note.start)–\(note.end)"
+                  : "\(spokenName)\n\(lane.title) · lines \(note.start)–\(note.end)")
             .anchorPreference(key: UncertaintyNoteAnchorsKey.self, value: .bounds) { [note.id: $0] }
             .ifLet(dragProvider) { view, provider in
                 view.onDrag { provider(note) }
