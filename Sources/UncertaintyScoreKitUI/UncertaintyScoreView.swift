@@ -447,7 +447,11 @@ public struct UncertaintyScoreView: View {
         let spokenName = note.title.isEmpty ? note.detail : note.title
         let label = "\(lane.title), \(naming.label(for: note.state)), lines \(note.start) to \(note.end)"
             + (spokenName.isEmpty ? "" : ". \(spokenName)")
-        Color.clear
+        // NOT `Color.clear`: a fully transparent view takes no hover, so the tooltip never appeared over a band
+        // (driven and checked — four seconds on the bar, nothing). A fill of almost-nothing is a real drawn
+        // surface, invisible on screen and present to the pointer.
+        Rectangle()
+            .fill(Color.white.opacity(0.001))
             .frame(width: width)
             .accessibilityElement()
             .accessibilityIdentifier("uncertainty-note-\(note.id)")
