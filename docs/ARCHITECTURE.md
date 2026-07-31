@@ -43,7 +43,9 @@ explicit `.settled` note. The two are different facts and the model keeps them d
   and total functions (`openness(at:)`, `peakState`). Pure value types, Foundation only, no I/O, no UI. It does not
   know what a "reading" is.
 - **Shell (`UncertaintyScoreKitUI`, `UncertaintyScoreDemo`)** — SwiftUI rendering, the solo/mute mixer, the triage
-  ribbon, and the snapshot harness. All effects live here.
+  ribbon, the arbitrary-lane rack, shared-spine viewport navigation, AX overlays, and the snapshot harness. All
+  effects live here. Selection and viewport state are still pure `UncertaintyNavigatorState` values supplied to the
+  shell.
 
 The producer supplies the adapter from its own artifacts into `UncertaintyScore`, and that adapter stays on the
 producer's side. This is the load-bearing boundary: it is what lets one view draw the uncertainty of anything —
@@ -63,6 +65,10 @@ no deficiency was scored — because rendering that as settled would erase the v
 The interaction is a multitrack mixer. **Solo** a dimension to read it alone across the whole work; **mute** the
 settled ones; read the `stacked` ribbon for triage — where many instruments play loud at once is where problems pile
 up, and one `failure` in a column spikes the ribbon red so a single "not read" span still draws the eye.
+
+The navigator is deliberately three resolutions of one collection: a searchable producer-ordered rack, a map whose
+lanes share one source-coordinate viewport, and a stable selected-thread account. Search, state filters, focus,
+solo/mute, pan, and zoom are explicit reader operations; none changes the producer order or drops data.
 
 ## Status and open questions
 
