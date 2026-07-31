@@ -13,6 +13,12 @@ public struct UncertaintyScoreNavigatorView: View {
     @State private var navigation: UncertaintyNavigatorState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The navigator is a contextual instrument, not a second full-height stage. Keep the three resolutions
+    /// visible without allowing a dense score to increase the height of the host's Story surface. The complete
+    /// collection remains reachable inside the rack and map viewports.
+    private static let navigatorViewportHeight: CGFloat = 248
+    private static let inspectorHeight: CGFloat = 132
+
     public init(score: UncertaintyScore, selectedAddress: Binding<UncertaintyAddress?>,
                 dragProvider: ((UncertaintyNote, UncertaintyAddress) -> NSItemProvider)? = nil,
                 onSelectAddress: ((UncertaintyAddress) -> Void)? = nil) {
@@ -28,7 +34,8 @@ public struct UncertaintyScoreNavigatorView: View {
             navigationControls
             HStack(alignment: .top, spacing: 12) {
                 laneRack
-                    .frame(minWidth: 218, maxWidth: 286, maxHeight: 430)
+                    .frame(minWidth: 218, maxWidth: 286,
+                           minHeight: Self.navigatorViewportHeight, maxHeight: Self.navigatorViewportHeight)
                 mapAndInspector
             }
         }
@@ -160,17 +167,37 @@ public struct UncertaintyScoreNavigatorView: View {
                 select(address)
             })
         return VStack(alignment: .leading, spacing: 8) {
-            UncertaintyScoreView(score: mapScore, selectedNoteId: binding, showsSelectionDetail: false,
-                                 dragProvider: { note in
-                                     guard let address = mapScoreAddress(for: note.id) else { return NSItemProvider() }
-                                     return dragProvider?(note, address) ?? NSItemProvider()
-                                 },
-                                 onSelectNote: { note in
-                                     if let address = mapScoreAddress(for: note.id) { select(address) }
-                                 })
-                .frame(maxWidth: .infinity)
-            genericInspector
+            // The shared spine is a bounded viewport. A large braid scrolls inside this region rather than
+            // pushing the beat/source surface below the fold. The score itself remains complete and the same
+            // source-coordinate viewport controls (pan/zoom/reset) still apply to every visible lane.
+            ScrollView(.vertical) {
+                UncertaintyScoreView(score: mapScore, selectedNoteId: binding, showsSelectionDetail: false,
+                                     dragProvider: { note in
+                                         guard let address = mapScoreAddress(for: note.id) else { return NSItemProvider() }
+                                         return dragProvider?(note, address) ?? NSItemProvider()
+                                     },
+                                     onSelectNote: { note in
+                                         if let address = mapScoreAddress(for: note.id) { select(address) }
+                                     })
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity,
+                   minHeight: Self.navigatorViewportHeight, maxHeight: Self.navigatorViewportHeight)
+            .background(Color.primary.opacity(0.018), in: RoundedRectangle(cornerRadius: 7))
+            .accessibilityIdentifier("uncertainty-map-viewport")
+            .accessibilityLabel("Shared uncertainty map viewport; scroll to inspect all lane marks")
+
+            // The selected-thread account has its own stable home and bounded scroll. Selecting a longer note
+            // never changes the map height or reflows the conversation around it.
+            ScrollView(.vertical) {
+                genericInspector
+            }
+            .frame(maxWidth: .infinity,
+                   minHeight: Self.inspectorHeight, maxHeight: Self.inspectorHeight,
+                   alignment: .topLeading)
+            .accessibilityIdentifier("uncertainty-thread-inspector-viewport")
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     /// The transformed score is private to the generic renderer. The public model and all callbacks remain
