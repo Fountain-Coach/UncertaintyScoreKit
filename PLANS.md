@@ -1,5 +1,11 @@
 # PLANS.md
 
+## Chapter 36 — addressed navigator and FCIS-AX release
+
+- Add provider-independent composite addresses and pure navigation state.
+- Add the searchable rack, shared-spine viewport, stable inspector, and AX parity to the SwiftUI shell.
+- Release the additive API as `v0.8.0` through GitHub after the focused and full library tests pass.
+
 This file defines the intent protocol for multi-step or high-risk work in this repository. Each plan states Goal,
 Scope, Non-goals, Constraints, Plan (steps with status), Validation, Risks, and Results.
 

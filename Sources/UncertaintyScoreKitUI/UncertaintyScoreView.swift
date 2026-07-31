@@ -426,7 +426,6 @@ public struct UncertaintyScoreView: View {
         if visible, score.spineEnd > score.spineStart, width > 0 {
             let span = Double(score.spineEnd - score.spineStart + 1)
             // The SAME wording the legend shows, so what is spoken and what is seen never diverge.
-            let naming = UncertaintyPalette(scheme)
             ZStack(alignment: .leading) {
                 ForEach(lane.notes) { note in
                     let x0 = CGFloat(Double(note.start - score.spineStart) / span) * width

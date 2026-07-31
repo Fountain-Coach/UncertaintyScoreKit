@@ -3,6 +3,23 @@ import XCTest
 
 final class UncertaintyScoreTests: XCTestCase {
 
+    func testAddressKeepsDuplicateLocalNoteIDsDistinct() {
+        let score = UncertaintyScore(title: "t", spineStart: 1, spineEnd: 10, itemCount: 1, lanes: [
+            UncertaintyLane(id: "alpha", title: "Alpha", notes: [
+                UncertaintyNote(id: "same", start: 1, end: 2, state: .thin)
+            ]),
+            UncertaintyLane(id: "beta", title: "Beta", notes: [
+                UncertaintyNote(id: "same", start: 3, end: 4, state: .thin)
+            ])
+        ])
+        let alpha = UncertaintyAddress(laneID: "alpha", noteID: "same")
+        let beta = UncertaintyAddress(laneID: "beta", noteID: "same")
+        XCTAssertNotEqual(alpha, beta)
+        XCTAssertEqual(score.note(for: alpha)?.start, 1)
+        XCTAssertEqual(score.note(for: beta)?.start, 3)
+        XCTAssertEqual(Set(score.addresses), [alpha, beta])
+    }
+
     // Grounded: a span a lane never assessed is BLANK, not settled. The two facts stay distinct.
     func testAbsenceIsExplicitNotSettled() {
         let lane = UncertaintyLane(id: "grd", title: "Grounding", notes: [
@@ -56,6 +73,57 @@ final class UncertaintyScoreTests: XCTestCase {
             UncertaintyNote(id: "3", start: 5, end: 6, state: .thin)
         ])
         XCTAssertEqual(lane.peakState, .ambiguity)
+    }
+}
+
+final class UncertaintyNavigatorStateTests: XCTestCase {
+    private func score() -> UncertaintyScore {
+        UncertaintyScore(title: "t", spineStart: 1, spineEnd: 100, itemCount: 2, lanes: [
+            UncertaintyLane(id: "first", title: "First", notes: [
+                UncertaintyNote(id: "same", start: 1, end: 20, state: .thin, title: "Need more")
+            ]),
+            UncertaintyLane(id: "second", title: "Second", notes: [
+                UncertaintyNote(id: "same", start: 30, end: 60, state: .failure, title: "Could not read")
+            ])
+        ])
+    }
+
+    func testFiltersPreserveProducerOrderAndLanes() {
+        var state = UncertaintyNavigatorState(score: score())
+        state.setSearchText("need")
+        state.setStateFilter([.thin])
+        XCTAssertEqual(state.visibleScore.lanes.map(\.id), ["first", "second"])
+        XCTAssertEqual(state.visibleScore.lanes[0].notes.map(\.id), ["same"])
+        XCTAssertTrue(state.visibleScore.lanes[1].notes.isEmpty)
+    }
+
+    func testSelectionSurvivesRefreshAndDynamicLaneArrival() {
+        let initial = score()
+        var state = UncertaintyNavigatorState(score: initial)
+        let address = UncertaintyAddress(laneID: "second", noteID: "same")
+        state.select(address)
+        let updated = UncertaintyScore(title: "t", spineStart: 1, spineEnd: 100, itemCount: 3, lanes: [
+            UncertaintyLane(id: "new", title: "Arrived", notes: []),
+            initial.lanes[0], initial.lanes[1]
+        ])
+        state.replaceScore(updated)
+        XCTAssertEqual(state.selection, address)
+        XCTAssertEqual(state.visibleScore.lanes.map(\.id), ["new", "first", "second"])
+        state.replaceScore(UncertaintyScore(title: "t", spineStart: 1, spineEnd: 100, itemCount: 1,
+                                             lanes: [initial.lanes[0]]))
+        XCTAssertNil(state.selection)
+    }
+
+    func testViewportKeepsSharedSourceCoordinatesThroughZoomAndPan() {
+        var viewport = UncertaintyViewport(fullRange: 1...100)
+        viewport.zoom(factor: 0.5, around: 50)
+        XCTAssertTrue(viewport.visibleRange.contains(50))
+        let zoomed = viewport.visibleRange
+        viewport.pan(by: 10)
+        XCTAssertEqual(viewport.visibleRange.upperBound - viewport.visibleRange.lowerBound,
+                       zoomed.upperBound - zoomed.lowerBound)
+        viewport.reset()
+        XCTAssertEqual(viewport.visibleRange, 1...100)
     }
 }
 
