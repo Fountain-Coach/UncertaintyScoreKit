@@ -207,6 +207,14 @@ public struct UncertaintyScoreNavigatorView: View {
 
     private var genericInspector: some View {
         let note = selectedAddress.flatMap { score.note(for: $0) }
+        let inspectorValue: String = {
+            guard let address = selectedAddress, let note else {
+                return "No uncertainty thread selected."
+            }
+            let detail = note.detail.isEmpty ? "No detail was recorded for this span." : note.detail
+            let closure = note.resolvedBy.map { " Closure: \($0)." } ?? ""
+            return "\(address.description) · \(note.state.rawValue) · lines \(note.start)–\(note.end). \(detail).\(closure)"
+        }()
         return VStack(alignment: .leading, spacing: 4) {
             if let address = selectedAddress, let note {
                 Text(note.title.isEmpty ? "Selected uncertainty thread" : note.title).font(.headline)
@@ -225,5 +233,6 @@ public struct UncertaintyScoreNavigatorView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("uncertainty-thread-inspector")
         .accessibilityLabel(note == nil ? "Uncertainty thread inspector, no thread selected" : "Selected uncertainty thread")
+        .accessibilityValue(inspectorValue)
     }
 }
