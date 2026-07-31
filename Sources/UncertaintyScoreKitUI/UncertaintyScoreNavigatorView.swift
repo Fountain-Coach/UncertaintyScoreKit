@@ -230,9 +230,8 @@ public struct UncertaintyScoreNavigatorView: View {
         .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
         .padding(10)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("uncertainty-thread-inspector")
-        .accessibilityLabel(note == nil ? "Uncertainty thread inspector, no thread selected" : "Selected uncertainty thread")
-        .accessibilityValue(inspectorValue)
+        .accessibilityLabel(note == nil ? "Uncertainty thread inspector, no thread selected" : inspectorValue)
     }
 }
