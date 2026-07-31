@@ -147,6 +147,10 @@ public struct UncertaintyScoreNavigatorView: View {
                                 .accessibilityValue(navigation.mutedLaneIDs.contains(lane.id) ? "On" : "Off")
                         }
                     }
+                    // Keep the disclosure container and each addressed note as separate AX elements. Without an
+                    // explicit containment boundary SwiftUI can publish the lane's identifier on child rows,
+                    // making the rack visually correct but semantically unable to select a composite address.
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("uncertainty-lane-\(lane.id)")
                     .accessibilityLabel("Uncertainty lane \(lane.title), \(lane.notes.count) notes")
                 }
