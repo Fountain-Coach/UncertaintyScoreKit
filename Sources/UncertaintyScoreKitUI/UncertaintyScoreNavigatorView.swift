@@ -8,14 +8,17 @@ public struct UncertaintyScoreNavigatorView: View {
     public let score: UncertaintyScore
     @Binding public var selectedAddress: UncertaintyAddress?
     public let onSelectAddress: ((UncertaintyAddress) -> Void)?
+    public let dragProvider: ((UncertaintyNote, UncertaintyAddress) -> NSItemProvider)?
 
     @State private var navigation: UncertaintyNavigatorState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(score: UncertaintyScore, selectedAddress: Binding<UncertaintyAddress?>,
+                dragProvider: ((UncertaintyNote, UncertaintyAddress) -> NSItemProvider)? = nil,
                 onSelectAddress: ((UncertaintyAddress) -> Void)? = nil) {
         self.score = score
         self._selectedAddress = selectedAddress
+        self.dragProvider = dragProvider
         self.onSelectAddress = onSelectAddress
         self._navigation = State(initialValue: UncertaintyNavigatorState(score: score))
     }
@@ -158,6 +161,10 @@ public struct UncertaintyScoreNavigatorView: View {
             })
         return VStack(alignment: .leading, spacing: 8) {
             UncertaintyScoreView(score: mapScore, selectedNoteId: binding, showsSelectionDetail: false,
+                                 dragProvider: { note in
+                                     guard let address = mapScoreAddress(for: note.id) else { return NSItemProvider() }
+                                     return dragProvider?(note, address) ?? NSItemProvider()
+                                 },
                                  onSelectNote: { note in
                                      if let address = mapScoreAddress(for: note.id) { select(address) }
                                  })
