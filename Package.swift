@@ -30,7 +30,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UncertaintyScoreKitTests",
-            dependencies: ["UncertaintyScoreKit"]
+            dependencies: ["UncertaintyScoreKit", "UncertaintyScoreKitUI"]
         )
     ]
 )

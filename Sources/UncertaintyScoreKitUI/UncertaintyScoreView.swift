@@ -456,7 +456,7 @@ public struct UncertaintyScoreView: View {
             .accessibilityElement()
             .accessibilityIdentifier("uncertainty-note-\(note.id)")
             .accessibilityLabel(label)
-            .accessibilityValue(note.resolvedBy.map { "Closed by \($0)" } ?? "")
+            .accessibilityValue(UncertaintyClosureCue.text(for: note.resolvedBy))
             .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { select(note) }
             .contentShape(Rectangle())
@@ -523,8 +523,9 @@ public struct UncertaintyScoreView: View {
                 Text(note.detail.isEmpty ? "No detail was recorded for this span." : note.detail)
                     .font(.system(size: 17, weight: .regular))
                     .fixedSize(horizontal: false, vertical: true)
-                if let resolvedBy = note.resolvedBy {
-                    Text("Closed by: \(resolvedBy)").font(.caption).foregroundStyle(.secondary)
+                let closureCue = UncertaintyClosureCue.text(for: note.resolvedBy)
+                if !closureCue.isEmpty {
+                    Text(closureCue).font(.caption).foregroundStyle(.secondary)
                 }
             }
             .padding(10)

@@ -76,3 +76,24 @@ against, because throttling in the view would hide a host's own performance bug.
 Results:
 - 2026-07-27: Step 1–3 landed. Core untouched (6 tests pass unchanged); UI gained one optional closure; fixtures
   re-rendered and inspected in light and dark — encoding identical, as intended.
+
+---
+
+Title: Prospective closure-cue wording (2026-07-31)
+Goal: Describe `resolvedBy` as the operation that could close an open note, never as a closure that already happened.
+Scope: UncertaintyScoreKitUI visible detail and accessibility value, shared copy helper, focused tests, patch release.
+Non-goals: renaming the compatible core field; adding Reframe ledger/want domain types; changing score encoding.
+Constraints: core remains producer-independent; visual and AX copy must be identical; existing stored scores decode
+unchanged.
+Plan:
+- Step 1 (status: completed) - Centralize and apply “Could be closed by” copy.
+- Step 2 (status: completed) - Add tests and run package validation.
+- Step 3 (status: completed) - Prepare v0.7.3 for Modernization Studio consumption.
+Validation:
+- `swift test`
+- `swift build`
+- `git diff --check`
+Results:
+- Visible detail and AX value now share `UncertaintyClosureCue`; neither claims a prospective operation already
+  closed the note.
+- `swift test` passed 13 tests; `swift build` passed.
