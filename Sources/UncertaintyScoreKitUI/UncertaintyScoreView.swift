@@ -1,8 +1,8 @@
 import SwiftUI
 import UncertaintyScoreKit
 
-// The score, drawn. One row per dimension over a shared spine, mixed with solo/mute — a person browses the reading's
-// uncertainty the way they'd browse a multitrack: follow one instrument, or read the whole texture at once.
+// The score, drawn. One row per dimension over a shared spine. Reader surfaces may show the whole texture;
+// authoring surfaces may additionally offer solo/mute controls.
 //
 // Colour carries STATE, never dimension identity (the lane's row + label already name the dimension), so the palette
 // is two validated status hues + neutral ink — checked colourblind-safe in light and dark by the dataviz validator.
@@ -91,10 +91,19 @@ public enum UncertaintyBraidPalette {
             ? Color(hue: hue, saturation: 0.55, brightness: 0.86)
             : Color(hue: hue, saturation: 0.62, brightness: 0.74)
     }
+
+    /// Stable identity tint shared by every surface that names a lane.
+    /// State is still encoded separately by the score's mark shape and status color.
+    public static func tint(laneID: String, scheme: ColorScheme = .light) -> Color {
+        let value = laneID.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
+        return tint(index: abs(value % 17), scheme: scheme)
+    }
 }
 
 public struct UncertaintyScoreView: View {
     public let score: UncertaintyScore
+    /// Reader surfaces may show the complete map without offering controls that hide lanes.
+    public let showsMixer: Bool
     /// Called when the reader clicks a mark, with the note under the click.
     ///
     /// The map names an openness over a span of the spine; only the HOST knows what that span is — a passage, a
@@ -129,17 +138,21 @@ public struct UncertaintyScoreView: View {
         onSelectNote?(note)
     }
 
-    public init(score: UncertaintyScore, onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
+    public init(score: UncertaintyScore, showsMixer: Bool = true,
+                onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
+        self.showsMixer = showsMixer
         self.onSelectNote = onSelectNote
         self.selectionBinding = nil
     }
 
     public init(score: UncertaintyScore, selectedNoteId: Binding<String?>,
                 showsSelectionDetail: Bool = true,
+                showsMixer: Bool = true,
                 dragProvider: ((UncertaintyNote) -> NSItemProvider)? = nil,
                 onSelectNote: ((UncertaintyNote) -> Void)? = nil) {
         self.score = score
+        self.showsMixer = showsMixer
         self.onSelectNote = onSelectNote
         self.selectionBinding = selectedNoteId
         self.showsSelectionDetail = showsSelectionDetail
@@ -170,6 +183,7 @@ public struct UncertaintyScoreView: View {
     }
 
     private var visibleLanes: [UncertaintyLane] {
+        guard showsMixer else { return score.lanes }
         if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
         return score.lanes.filter { !muted.contains($0.id) }
     }
@@ -200,7 +214,7 @@ public struct UncertaintyScoreView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(score.title).font(.system(size: 20, weight: .semibold))
-            Text("What the first reading is unsure of — \(score.lanes.count) dimensions over lines \(score.spineStart)–\(score.spineEnd), from \(score.itemCount) passage\(score.itemCount == 1 ? "" : "s"). Solo or mute a dimension; the ribbon shows where problems stack up.")
+            Text("What the first reading is unsure of — \(score.lanes.count) dimensions over lines \(score.spineStart)–\(score.spineEnd), from \(score.itemCount) passage\(score.itemCount == 1 ? "" : "s"). The ribbon shows where problems stack up.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -216,7 +230,7 @@ public struct UncertaintyScoreView: View {
                 }
             }
             Spacer(minLength: 0)
-            if !muted.isEmpty || !soloed.isEmpty {
+            if showsMixer && (!muted.isEmpty || !soloed.isEmpty) {
                 Button("Reset mix") { muted.removeAll(); soloed.removeAll() }
                     .buttonStyle(.link).font(.caption)
             }
@@ -473,7 +487,8 @@ public struct UncertaintyScoreView: View {
 
     private func laneGutter(_ lane: UncertaintyLane, palette: UncertaintyPalette) -> some View {
         HStack(spacing: 6) {
-            Circle().fill(palette.stroke(for: lane.peakState).opacity(lane.peakState == .settled ? 0.4 : 0.9))
+            Circle().fill(UncertaintyBraidPalette.tint(laneID: lane.id, scheme: scheme)
+                .opacity(lane.peakState == .settled ? 0.4 : 0.9))
                 .frame(width: 7, height: 7)
             Text(lane.title).font(.system(size: 11, weight: lane.isFailureAxis ? .semibold : .regular))
                 // A lane's title is its identity. Truncating it ("Beats — questions held o…") makes the writer
@@ -482,8 +497,10 @@ public struct UncertaintyScoreView: View {
                 .multilineTextAlignment(.leading)
                 .foregroundStyle(isVisible(lane) ? .primary : .secondary)
             Spacer(minLength: 0)
-            mixButton("S", on: soloed.contains(lane.id)) { toggle(&soloed, lane.id) }
-            mixButton("M", on: muted.contains(lane.id)) { toggle(&muted, lane.id) }
+            if showsMixer {
+                mixButton("S", on: soloed.contains(lane.id)) { toggle(&soloed, lane.id) }
+                mixButton("M", on: muted.contains(lane.id)) { toggle(&muted, lane.id) }
+            }
         }
         .frame(width: Self.gutterWidth, alignment: .leading)
         .help(lane.isFailureAxis ? "A failure here means the span was not read or could not be grounded." : lane.title)
