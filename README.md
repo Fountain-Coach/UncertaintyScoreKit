@@ -1,6 +1,6 @@
 # UncertaintyScoreKit
 
-**Status:** 0.9.0 — shared note visual identity and reciprocal host selection. The model, SwiftUI renderer, snapshot
+**Status:** 0.10.0 — shared note visual identity, reciprocal host selection, and semantic selection swell. The model, SwiftUI renderer, snapshot
 harness, and cross-surface selection token are FCIS-reviewed; encoding remains not yet tuned against large real data.
 
 UncertaintyScoreKit renders **what a first pass is unsure of** as a browsable score — an *orchestra of dimensions*

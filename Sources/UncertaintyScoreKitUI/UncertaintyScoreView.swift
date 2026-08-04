@@ -559,19 +559,20 @@ public struct UncertaintyScoreView: View {
                               tint: Color, selected: Bool, dimmed: Bool) {
         let base = tint
         if selected {
-            let halo = CGRect(x: rect.minX - 3, y: 0, width: rect.width + 6, height: rowHeight)
+            let halo = CGRect(x: rect.minX - 4, y: -1, width: rect.width + 8, height: rowHeight + 2)
             ctx.fill(Path(roundedRect: halo, cornerRadius: 4), with: .color(base.opacity(0.22)))
         }
         // The colour IS the identity, so selection cannot recolour it — it lights it and steps the others back.
         let body = base
         let strength = selected ? 1.0 : (dimmed ? 0.34 : 0.72 + 0.24 * note.magnitude)
-        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(body.opacity(strength)))
+        let bodyRect = selected ? rect.insetBy(dx: -1.25, dy: -1.25) : rect
+        ctx.fill(Path(roundedRect: bodyRect, cornerRadius: 3.5), with: .color(body.opacity(strength)))
         if selected {
-            ctx.stroke(Path(roundedRect: rect.insetBy(dx: -1.5, dy: -1.5), cornerRadius: 4),
-                       with: .color(.primary.opacity(0.75)), lineWidth: 2)
+            ctx.stroke(Path(roundedRect: bodyRect.insetBy(dx: -0.5, dy: -0.5), cornerRadius: 4),
+                       with: .color(base.opacity(0.95)), lineWidth: 1.5)
         }
         // The state still has to survive greyscale: a thin darker keel along the foot of the bar carries it.
-        let keel = CGRect(x: rect.minX, y: rect.maxY - 2, width: rect.width, height: 2)
+        let keel = CGRect(x: bodyRect.minX, y: bodyRect.maxY - 2, width: bodyRect.width, height: 2)
         ctx.fill(Path(roundedRect: keel, cornerRadius: 1), with: .color(body.opacity(selected ? 1 : strength * 0.7)))
     }
 
@@ -616,8 +617,9 @@ public struct UncertaintyScoreView: View {
         }
 
         if selected {
-            ctx.stroke(Path(roundedRect: rect.insetBy(dx: -1, dy: -1), cornerRadius: 3),
-                       with: .color(.accentColor), lineWidth: 1.5)
+            let selectedRect = rect.insetBy(dx: -1.25, dy: -1.25)
+            ctx.stroke(Path(roundedRect: selectedRect, cornerRadius: 3.5),
+                       with: .color(color.opacity(0.95)), lineWidth: 1.5)
         }
     }
 }

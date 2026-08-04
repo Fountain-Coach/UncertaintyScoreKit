@@ -133,4 +133,21 @@ Risks: changing the note tint seed changes screenshots; regenerate/inspect VRT f
 visual release change.
 Results:
 - One deterministic note identity now drives both the score braid and Copilot row tint.
+
+Title: Semantic selection swell across mounted surfaces (2026-08-04)
+Goal: Preserve canonical lane colors while making selection legible through a small shape swell rather than recoloring.
+Scope: Score mark geometry, host Copilot row, and source Atom chrome.
+Non-goals: Color as semantic authority, transient selection persistence, or changes to note state.
+Constraints: FCIS-AX labels and selected state remain authoritative; color is reinforcement only; the package remains
+Foundation-only in its core and keeps the UI behavior additive.
+Plan:
+- Step 1 (status: completed) - Keep the canonical note tint unchanged while enlarging the selected score mark.
+- Step 2 (status: completed) - Apply the same tint and a 1.2% leading-edge swell to Copilot question rows.
+- Step 3 (status: completed) - Apply the selected note tint to overlapping Atom cards and use a small card swell.
+- Step 4 (status: completed) - Bump the pre-1.0 package minor version to `v0.10.0` and validate consumers.
+Validation:
+- `swift test`, `swift build`, focused app tests, and Polyx live AX verification.
+Results:
+- Selection no longer changes the semantic color on any surface; it swells the selected object while the exact same
+  canonical color remains visible on Score, Copilot, and the related Atoms.
 - Selection is explicitly handed from the score to the host as well as bound in the score view.
