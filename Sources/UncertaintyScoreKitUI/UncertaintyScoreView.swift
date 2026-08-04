@@ -464,6 +464,10 @@ public struct UncertaintyScoreView: View {
             .accessibilityAddTraits(selection?.id == note.id ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { select(note) }
             .contentShape(Rectangle())
+            // The AX overlay is also physically above the Canvas. Without the ordinary gesture it correctly
+            // exposes the mark to VoiceOver but intercepts a pointer click and leaves the Canvas underneath
+            // unreachable. Pointer and AX activation must converge on the same addressed selection action.
+            .onTapGesture { select(note) }
             // WHAT THIS BAND IS, ON HOVER. A braid carries no labels by design — names do not stack — but a
             // wordless bar is only legible once you already know what it is. The tooltip is the cheapest way to
             // ask "and this one?" without spending the room a label would.

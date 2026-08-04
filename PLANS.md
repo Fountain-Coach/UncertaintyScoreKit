@@ -150,4 +150,17 @@ Validation:
 Results:
 - Selection no longer changes the semantic color on any surface; it swells the selected object while the exact same
   canonical color remains visible on Score, Copilot, and the related Atoms.
+
+Title: Score pointer activation reaches shared selection (2026-08-04)
+Goal: Make a direct click on a visible uncertainty mark produce the same addressed selection as AX activation.
+Scope: The transparent mark overlay in `UncertaintyScoreKitUI`.
+Non-goals: Change selection identity, colors, or producer-side routing.
+Constraints: The overlay remains the AX authority and pointer activation must call the same `select(note)` path.
+Plan:
+- Step 1 (status: completed) - Forward pointer taps from every mark overlay element to the addressed selection.
+- Step 2 (status: completed) - Bump the pre-1.0 package minor version to `v0.11.0` and validate the host.
+Validation:
+- `swift test`, app build, AX activation, and Polyx live selection verification.
+Results:
+- Score mark activation now works for pointer and AX; both publish the same note address to Copilot and Atoms.
 - Selection is explicitly handed from the score to the host as well as bound in the score view.
