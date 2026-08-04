@@ -3,6 +3,22 @@ import XCTest
 
 final class UncertaintyScoreTests: XCTestCase {
 
+    func testNoteVisualIdentityIsStableAcrossOrderAndSharedByScore() {
+        let first = UncertaintyNoteVisualIdentity(laneID: "open", noteID: "q-1")
+        let second = UncertaintyNoteVisualIdentity(laneID: "open", noteID: "q-1")
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(first, UncertaintyNoteVisualIdentity(laneID: "open", noteID: "q-2"))
+
+        let score = UncertaintyScore(
+            title: "reading", spineStart: 1, spineEnd: 10, itemCount: 1,
+            lanes: [UncertaintyLane(id: "open", title: "Open", notes: [
+                UncertaintyNote(id: "q-1", start: 1, end: 2, state: .ambiguity)
+            ], presentation: .braid)]
+        )
+        XCTAssertEqual(score.visualIdentity(for: "q-1"), first)
+        XCTAssertNil(score.visualIdentity(for: "missing"))
+    }
+
     func testAddressKeepsDuplicateLocalNoteIDsDistinct() {
         let score = UncertaintyScore(title: "t", spineStart: 1, spineEnd: 10, itemCount: 1, lanes: [
             UncertaintyLane(id: "alpha", title: "Alpha", notes: [

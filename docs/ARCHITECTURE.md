@@ -47,6 +47,14 @@ explicit `.settled` note. The two are different facts and the model keeps them d
   effects live here. Selection and viewport state are still pure `UncertaintyNavigatorState` values supplied to the
   shell.
 
+### Shared note identity across hosts
+
+`UncertaintyNoteVisualIdentity` is the core's provider-independent visual token for a note. It contains the stable
+lane and note addresses plus a deterministic palette slot derived from those addresses. The core does not contain a
+SwiftUI colour. A renderer maps the slot to its validated palette; a host such as Copilot can use the same token for
+its question row. This prevents order-dependent recolouring when passages arrive and keeps score selection and host
+selection attached to the same note identity.
+
 The producer supplies the adapter from its own artifacts into `UncertaintyScore`, and that adapter stays on the
 producer's side. This is the load-bearing boundary: it is what lets one view draw the uncertainty of anything —
 a close reading, log triage, a labelling run — rather than one domain's.

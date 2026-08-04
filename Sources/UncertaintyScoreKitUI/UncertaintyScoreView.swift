@@ -173,15 +173,6 @@ public struct UncertaintyScoreView: View {
     /// Tall enough to hit with a pointer, short enough that fifteen rows still fit on a stage.
     private static let braidRowHeight: CGFloat = 22
 
-    /// A note's position in its own lane — the seed of its colour, computed once for the whole score.
-    private var indexInLane: [String: Int] {
-        var map: [String: Int] = [:]
-        for lane in score.lanes {
-            for (i, note) in lane.notes.enumerated() { map[note.id] = i }
-        }
-        return map
-    }
-
     private var visibleLanes: [UncertaintyLane] {
         guard showsMixer else { return score.lanes }
         if !soloed.isEmpty { return score.lanes.filter { soloed.contains($0.id) } }
@@ -316,9 +307,9 @@ public struct UncertaintyScoreView: View {
                                 // A bar sits INSIDE its row with air above and below. Filling the row edge to edge
                                 // made six packed rows read as one solid block, and a bar you cannot separate from
                                 // its neighbour is a bar you cannot follow across the chapter.
-                                let rect = CGRect(x: x0, y: 2, width: max(4, x1 - x0 - 1), height: size.height - 4)
+                                             let rect = CGRect(x: x0, y: 2, width: max(4, x1 - x0 - 1), height: size.height - 4)
                                 drawBraidBar(&ctx, note: note, rect: rect, rowHeight: size.height,
-                                             tint: UncertaintyBraidPalette.tint(index: indexInLane[note.id] ?? 0,
+                                             tint: UncertaintyBraidPalette.tint(index: UncertaintyNoteVisualIdentity(laneID: lane.id, noteID: note.id).colorIndex,
                                                                                 scheme: scheme),
                                              selected: selection?.id == note.id,
                                              dimmed: selection != nil && selection?.id != note.id)
@@ -336,7 +327,7 @@ public struct UncertaintyScoreView: View {
                                         fade.addRect(CGRect(x: x, y: rect.midY - 1.5, width: 4, height: 3))
                                         x += 7
                                     }
-                                    ctx.fill(fade, with: .color(UncertaintyBraidPalette.tint(index: indexInLane[note.id] ?? 0, scheme: scheme).opacity(0.55)))
+                                    ctx.fill(fade, with: .color(UncertaintyBraidPalette.tint(index: UncertaintyNoteVisualIdentity(laneID: lane.id, noteID: note.id).colorIndex, scheme: scheme).opacity(0.55)))
                                 }
                             }
                         }

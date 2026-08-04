@@ -103,3 +103,34 @@ Results:
 - Visible detail and AX value now share `UncertaintyClosureCue`; neither claims a prospective operation already
   closed the note.
 - `swift test` passed 13 tests; `swift build` passed.
+
+---
+
+Title: Shared note visual identity and reciprocal host selection (2026-08-04)
+Goal: Give every mounted surface one stable visual identity and one selection address for the same uncertainty note.
+Scope: Pure-core note visual identity token, SwiftUI palette adoption, host selection callback verification, focused
+tests, FCIS release metadata.
+Non-goals: Put SwiftUI colors in the core; encode semantics by color alone; change uncertainty states or producer
+adapters; persist transient selection.
+Constraints: Functional Core / Imperative Shell; core remains Foundation-only and producer-independent; color remains
+reinforcement and every mark retains shape, label, and AX state. Additive public API on the pre-1.0 package requires
+a minor release under the FCIS versioning rule.
+Plan:
+- Step 1 (status: completed) - Add `UncertaintyNoteVisualIdentity` and `UncertaintyScore.visualIdentity(for:)` in the
+  pure core; make the identity deterministic from stable lane and note addresses.
+- Step 2 (status: completed) - Make `UncertaintyScoreKitUI` render braid notes from the canonical token and expose
+  the existing selection callback to the host.
+- Step 3 (status: completed) - Make Reframe Copilot consume the same token and make score selection publish the same
+  note address back to Copilot.
+- Step 4 (status: completed) - Run package/app tests, build, AX checks, and Polyx live verification in both directions.
+- Step 5 (status: completed) - Record the additive API as `v0.9.0` and update consumer pin/provenance.
+Validation:
+- `swift test` in this package.
+- `swift build` and focused tests in Modernization Studio.
+- Live AX: score mark selection reports the matching Copilot row as selected; Copilot selection focuses the matching
+  score/source beat; no color-only claim is made.
+Risks: changing the note tint seed changes screenshots; regenerate/inspect VRT fixtures and treat this as a deliberate
+visual release change.
+Results:
+- One deterministic note identity now drives both the score braid and Copilot row tint.
+- Selection is explicitly handed from the score to the host as well as bound in the score view.

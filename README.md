@@ -1,7 +1,7 @@
 # UncertaintyScoreKit
 
-**Status:** 0.1.0 — first cut. The model, the SwiftUI renderer, and a snapshot harness. Encoding proven by eye in
-light and dark; not yet tuned against large real datasets.
+**Status:** 0.9.0 — shared note visual identity and reciprocal host selection. The model, SwiftUI renderer, snapshot
+harness, and cross-surface selection token are FCIS-reviewed; encoding remains not yet tuned against large real data.
 
 UncertaintyScoreKit renders **what a first pass is unsure of** as a browsable score — an *orchestra of dimensions*
 (instruments) over a shared *spine* (source order, time, or any 1-D coordinate). It exists for a specific, repeated

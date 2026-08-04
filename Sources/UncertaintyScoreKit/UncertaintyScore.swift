@@ -120,6 +120,29 @@ public struct UncertaintyNote: Codable, Sendable, Identifiable, Equatable {
     public var span: ClosedRange<Int> { start...end }
 }
 
+/// The shared visual identity of a note across hosts.
+///
+/// This is deliberately a pure token, not a SwiftUI `Color`: the functional core owns identity and stable
+/// assignment, while each imperative shell chooses how to render that token. A note's token is derived from its
+/// stable lane and note addresses, never from the current array order, so adding or settling another note cannot
+/// repaint the existing reading.
+public struct UncertaintyNoteVisualIdentity: Codable, Sendable, Equatable {
+    public let laneID: String
+    public let noteID: String
+    /// A stable palette slot. The UI maps this slot to its validated colour palette.
+    public let colorIndex: Int
+
+    public init(laneID: String, noteID: String) {
+        self.laneID = laneID
+        self.noteID = noteID
+        var hash = 17
+        for scalar in (laneID + "\u{1F}" + noteID).unicodeScalars {
+            hash = hash &* 31 &+ Int(scalar.value)
+        }
+        self.colorIndex = abs(hash % 17)
+    }
+}
+
 // MARK: - Lane
 
 /// One dimension of uncertainty — an instrument. Identity is carried by the lane (its `title` and its row), so a
@@ -240,4 +263,12 @@ public struct UncertaintyScore: Codable, Sendable, Equatable {
     }
 
     public func lane(id: String) -> UncertaintyLane? { lanes.first { $0.id == id } }
+
+    /// Returns the same visual identity consumed by every host surface for a note.
+    public func visualIdentity(for noteID: String) -> UncertaintyNoteVisualIdentity? {
+        for lane in lanes where lane.notes.contains(where: { $0.id == noteID }) {
+            return UncertaintyNoteVisualIdentity(laneID: lane.id, noteID: noteID)
+        }
+        return nil
+    }
 }
