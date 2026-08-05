@@ -172,6 +172,9 @@ public struct UncertaintyScoreView: View {
     private static let laneHeight: CGFloat = 34
     /// Tall enough to hit with a pointer, short enough that fifteen rows still fit on a stage.
     private static let braidRowHeight: CGFloat = 22
+    /// How many packed rows a lane draws when it is not the one being read. Six keeps the tallest lane inside a
+    /// glance while the depth ribbon carries the rest; the lane holding the selection is not capped at all.
+    private static let braidRowCap: Int = 6
 
     private var visibleLanes: [UncertaintyLane] {
         guard showsMixer else { return score.lanes }
@@ -291,11 +294,32 @@ public struct UncertaintyScoreView: View {
     private func braidLane(_ lane: UncertaintyLane) -> some View {
         let palette = UncertaintyPalette(scheme)
         let visible = isVisible(lane)
-        let rows = lane.rows
+        // ADAPTIVE ROW DETAIL, NOT AN UNBOUNDED STACK.
+        //
+        // `lane.rows` packs greedily: a note joins the first row whose last note ended before it starts, else a new
+        // row is appended. For beats that is exactly right and self-limiting — a story carries a few threads at
+        // once. For a ledger whose notes each span most of the work it degenerates to ONE ROW PER NOTE, and the
+        // row height was chosen on the assumption that "fifteen rows still fit on a stage".
+        //
+        // Measured on Glaspell's TRIFLES, a 673-line one-act: 112 unresolved name forms, one full-width row each,
+        // and the uncertainty map ran off the bottom of the window taking the reading surface with it. The map
+        // that exists to show where problems stack up became the problem.
+        //
+        // So an unselected lane shows a bounded number of rows and hands the rest to the depth ribbon, which this
+        // file already draws for precisely this case — "past a dozen the rows are too many to count". The lane
+        // holding the selection is given its full resolution, which is what the doctrine asks for: more vertical
+        // resolution where the reader is looking, every other lane still addressable. Nothing is omitted — the
+        // remaining threads keep their marks in the accessibility layer and their place in the ribbon.
+        let allRows = lane.rows
+        let laneHoldsSelection = selection.map { sel in lane.notes.contains { $0.id == sel.id } } ?? false
+        let rows = laneHoldsSelection ? allRows : Array(allRows.prefix(Self.braidRowCap))
+        let packedAway = allRows.dropFirst(rows.count).flatMap { $0 }
         HStack(alignment: .top, spacing: 8) {
             laneGutter(lane, palette: palette)
             VStack(alignment: .leading, spacing: 3) {
-                depthRibbon(rows: rows, visible: visible, palette: palette)
+                // The ribbon always speaks for EVERY thread, drawn or not, so the density a reader sees is the
+                // density the lane holds.
+                depthRibbon(rows: allRows, visible: visible, palette: palette)
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GeometryReader { proxy in
                         Canvas { ctx, size in
@@ -347,6 +371,30 @@ public struct UncertaintyScoreView: View {
                         }
                     }
                     .frame(height: Self.braidRowHeight)
+                }
+                // WHAT IS PACKED AWAY SAYS SO, AND STAYS REACHABLE. Omission would make a lane that is carrying
+                // ninety threads look like a lane carrying six — the same failure as a ledger that reports nothing
+                // and a monitor nobody reads. The count is stated, and every undrawn note keeps its accessibility
+                // mark, so a reader (or a screen reader, or a drive) can still reach it.
+                if !packedAway.isEmpty {
+                    HStack(spacing: 6) {
+                        Text("+\(packedAway.count) more, packed")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("select one to open this lane")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(height: 14, alignment: .leading)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("lane-packed-\(lane.id)")
+                    .accessibilityLabel("\(packedAway.count) more threads in \(lane.title), packed away")
+                    .overlay(alignment: .leading) {
+                        markAccessibilityLayer(UncertaintyLane(id: lane.id, title: lane.title,
+                                                               isFailureAxis: lane.isFailureAxis,
+                                                               notes: packedAway),
+                                               visible: visible, width: 0)
+                    }
                 }
             }
             .opacity(visible ? 1 : 0.28)
